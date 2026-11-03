@@ -70,7 +70,7 @@ export default async function DashboardLayout({
           <p className="mt-1 text-sm font-medium uppercase tracking-wide text-slate-400">
             {user.role.replaceAll("_", " ")}
           </p>
-          <div className="mt-3 flex min-h-12 items-center">
+          <div className="mt-3 flex min-h-12 w-full items-center">
             <LogoutButton />
           </div>
         </div>

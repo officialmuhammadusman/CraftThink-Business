@@ -109,7 +109,7 @@ export default function TasksPage() {
       {!loading && items.length === 0 && !error && (
         <Card className="mt-4">
           <CardContent className="p-6 text-center">
-            <Image src="/images/empty-generic.svg" alt="" width={320} height={220} className="mx-auto h-auto w-full max-w-xs" />
+            <Image src="/images/empty-tasks.svg" alt="" width={320} height={220} className="mx-auto h-auto w-full max-w-xs" />
             <p className="mt-4 text-base text-slate-500">No tasks match this filter.</p>
           </CardContent>
         </Card>

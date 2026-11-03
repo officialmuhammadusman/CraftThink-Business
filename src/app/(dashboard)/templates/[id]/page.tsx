@@ -3,16 +3,14 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  api,
-  btnPrimary,
-  btnDanger,
-  inputCls,
-  Field,
-  ErrorAlert,
-  TOKEN_HELP,
-  useMe,
-} from "../../emails/ui";
+import { api, ErrorAlert, TOKEN_HELP, useMe } from "../../emails/ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import PageHeader from "@/components/PageHeader";
 
 type Template = {
   id: string;
@@ -57,92 +55,110 @@ export default function TemplateDetailPage() {
   if (error) {
     return (
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Template</h1>
+        <PageHeader title="Template" backHref="/templates" backLabel="All templates" />
         <div className="mt-4"><ErrorAlert message={error} /></div>
       </div>
     );
   }
-  if (!loaded) return <p className="text-sm text-slate-500">Loading template…</p>;
+  if (!loaded) {
+    return (
+      <div>
+        <PageHeader title="Template" backHref="/templates" backLabel="All templates" />
+        <div className="mt-6 space-y-3" aria-label="Loading template">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+      </div>
+    );
+  }
 
   const canDelete = role === "SUPER_ADMIN" || role === "ADMIN";
 
   return (
     <div className="max-w-2xl">
-      <Link href="/templates" className="text-sm text-brand-700 hover:underline">
-        ← All templates
-      </Link>
-      <h1 className="mt-2 text-xl font-semibold text-slate-900">Edit template</h1>
-      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-        {TOKEN_HELP}
-      </div>
-      <form
-        className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setError(null);
-          setSaving(true);
-          try {
-            await api(`/api/templates/${params.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name,
-                industry: industry || null,
-                subject,
-                body,
-              }),
-            });
-            router.push("/templates");
-          } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Failed to save template");
-          } finally {
-            setSaving(false);
-          }
-        }}
-      >
-        <ErrorAlert message={error} />
-        <Field label="Template name *">
-          <input required value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Industry">
-          <input value={industry} onChange={(e) => setIndustry(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Subject *">
-          <input required value={subject} onChange={(e) => setSubject(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Body *">
-          <textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={10} className={inputCls} />
-        </Field>
-        <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={saving} className={btnPrimary}>
-            {saving ? "Saving…" : "Save changes"}
-          </button>
-          {canDelete ? (
-            <button
-              type="button"
-              disabled={deleting}
-              className={btnDanger}
-              onClick={async () => {
-                if (!window.confirm("Delete this template? Recorded emails keep their subject/body, but lose the template link.")) return;
-                setDeleting(true);
-                try {
-                  await api(`/api/templates/${params.id}`, { method: "DELETE" });
-                  router.push("/templates");
-                } catch (err: unknown) {
-                  setError(err instanceof Error ? err.message : "Failed to delete template");
-                  setDeleting(false);
-                }
-              }}
-            >
-              {deleting ? "Deleting…" : "Delete template"}
-            </button>
-          ) : (
-            <p className="text-xs text-slate-500 self-center">
-              Only Admins can delete templates, so live campaigns are not broken.
-            </p>
-          )}
-        </div>
-      </form>
+      <PageHeader title="Edit template" backHref="/templates" backLabel="All templates" />
+      <Card className="mt-6">
+        <CardContent className="p-4 text-base text-slate-600 sm:p-6">
+          {TOKEN_HELP}
+        </CardContent>
+      </Card>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Template details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="space-y-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setError(null);
+              setSaving(true);
+              try {
+                await api(`/api/templates/${params.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name, industry: industry || null, subject, body }),
+                });
+                router.push("/templates");
+              } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Failed to save template");
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            <ErrorAlert message={error} />
+            <div className="space-y-2">
+              <Label htmlFor="template-name">Template name *</Label>
+              <Input id="template-name" required value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-industry">Industry</Label>
+              <Input id="template-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-subject">Subject *</Label>
+              <Input id="template-subject" required value={subject} onChange={(e) => setSubject(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-body">Body *</Label>
+              <Textarea id="template-body" required value={body} onChange={(e) => setBody(e.target.value)} rows={10} />
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <Button type="submit" disabled={saving}>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+              {canDelete ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={deleting}
+                  onClick={async () => {
+                    if (!window.confirm("Delete this template? Recorded emails keep their subject/body, but lose the template link.")) return;
+                    setDeleting(true);
+                    try {
+                      await api(`/api/templates/${params.id}`, { method: "DELETE" });
+                      router.push("/templates");
+                    } catch (err: unknown) {
+                      setError(err instanceof Error ? err.message : "Failed to delete template");
+                      setDeleting(false);
+                    }
+                  }}
+                >
+                  {deleting ? "Deleting…" : "Delete template"}
+                </Button>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Only Admins can delete templates, so live campaigns are not broken.
+                </p>
+              )}
+              <Button type="button" variant="outline" asChild>
+                <Link href="/templates">Back to list</Link>
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

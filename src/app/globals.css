@@ -32,3 +32,24 @@
     overflow-x: hidden;
   }
 }
+
+@layer base {
+  /* Inline links inside table rows get a 44px+ tap target on every page. */
+  table a {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

@@ -3,18 +3,15 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  api,
-  btnPrimary,
-  btnDanger,
-  btnSecondary,
-  inputCls,
-  Field,
-  ErrorAlert,
-  StatusBadge,
-  fmtDateTime,
-  statusLabel,
-} from "../../emails/ui";
+import { api, ErrorAlert, StatusBadge, fmtDateTime } from "../../emails/ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import PageHeader from "@/components/PageHeader";
 
 type Activity = {
   id: string;
@@ -67,130 +64,177 @@ export default function CampaignDetailPage() {
   if (error) {
     return (
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Campaign</h1>
+        <PageHeader title="Campaign" backHref="/campaigns" backLabel="All campaigns" />
         <div className="mt-4"><ErrorAlert message={error} /></div>
       </div>
     );
   }
-  if (!detail) return <p className="text-sm text-slate-500">Loading campaign…</p>;
+  if (!detail) {
+    return (
+      <div>
+        <PageHeader title="Campaign" backHref="/campaigns" backLabel="All campaigns" />
+        <div className="mt-6 space-y-3" aria-label="Loading campaign">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <Link href="/campaigns" className="text-sm text-brand-700 hover:underline">
-        ← All campaigns
-      </Link>
-      <h1 className="mt-2 text-xl font-semibold text-slate-900">{detail.campaign.name}</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Owner: {detail.campaign.owner?.name ?? "Unassigned"} · {detail.totalActivities} tracked email(s)
-      </p>
+      <PageHeader
+        title={detail.campaign.name}
+        subtitle={`Owner: ${detail.campaign.owner?.name ?? "Unassigned"} · ${detail.totalActivities} tracked email(s)`}
+        backHref="/campaigns"
+        backLabel="All campaigns"
+      />
+      {detail.campaign.description ? (
+        <p className="mt-4 text-base text-slate-600">{detail.campaign.description}</p>
+      ) : null}
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Emails by status</h2>
-        {detail.countsByStatus.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No tracked emails in this campaign yet.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {detail.countsByStatus.map((row) => (
-              <li key={row.status} className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">{statusLabel(row.status)}</span>
-                <span className="font-medium text-slate-900">{row.count}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Emails by status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {detail.countsByStatus.length === 0 ? (
+            <p className="text-base text-slate-500">No tracked emails in this campaign yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {detail.countsByStatus.map((row) => (
+                <li key={row.status} className="flex flex-wrap items-center justify-between gap-2 text-base">
+                  <StatusBadge status={row.status} />
+                  <span className="font-medium text-slate-900">{row.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Tracked emails (latest 100)</h2>
-        {detail.activities.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">None yet.</p>
-        ) : (
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="py-2 pr-3">Subject</th>
-                  <th className="py-2 pr-3">Recipient</th>
-                  <th className="py-2 pr-3">Company</th>
-                  <th className="py-2 pr-3">Status</th>
-                  <th className="py-2">Sent</th>
-                </tr>
-              </thead>
-              <tbody>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Tracked emails (latest 100)</CardTitle>
+          <CardDescription>Tap an email to open its record.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {detail.activities.length === 0 ? (
+            <p className="text-base text-slate-500">None yet.</p>
+          ) : (
+            <>
+              <div className="grid gap-3 md:hidden">
                 {detail.activities.map((a) => (
-                  <tr key={a.id} className="border-b border-slate-100 last:border-0">
-                    <td className="py-2 pr-3">
-                      <Link href={`/emails/${a.id}`} className="text-brand-700 hover:underline">
+                  <Card key={a.id}>
+                    <CardContent className="p-4">
+                      <Link href={`/emails/${a.id}`} className="inline-flex min-h-12 items-center text-base font-medium text-brand-600 hover:underline">
                         {a.subject}
                       </Link>
-                    </td>
-                    <td className="py-2 pr-3">{a.recipientEmail}</td>
-                    <td className="py-2 pr-3">{a.company.name}</td>
-                    <td className="py-2 pr-3"><StatusBadge status={a.status} /></td>
-                    <td className="py-2">{fmtDateTime(a.sentAt)}</td>
-                  </tr>
+                      <p className="text-base text-slate-600">{a.recipientEmail} · {a.company.name}</p>
+                      <p className="mt-2 flex flex-wrap items-center gap-2">
+                        <StatusBadge status={a.status} />
+                        <span className="text-sm text-slate-500">{fmtDateTime(a.sentAt)}</span>
+                      </p>
+                    </CardContent>
+                  </Card>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </div>
+              <div className="hidden overflow-x-auto md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Subject</TableHead>
+                      <TableHead>Recipient</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Sent</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detail.activities.map((a) => (
+                      <TableRow key={a.id}>
+                        <TableCell>
+                          <Link href={`/emails/${a.id}`} className="font-medium text-brand-600 hover:underline">
+                            {a.subject}
+                          </Link>
+                        </TableCell>
+                        <TableCell>{a.recipientEmail}</TableCell>
+                        <TableCell>{a.company.name}</TableCell>
+                        <TableCell><StatusBadge status={a.status} /></TableCell>
+                        <TableCell>{fmtDateTime(a.sentAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Edit campaign</h2>
-        <form
-          className="mt-3 space-y-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError(null);
-            setSaving(true);
-            try {
-              await api(`/api/campaigns/${params.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, description: description || null }),
-              });
-              router.push("/campaigns");
-            } catch (err: unknown) {
-              setError(err instanceof Error ? err.message : "Failed to save campaign");
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          <ErrorAlert message={error} />
-          <Field label="Campaign name *">
-            <input required value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-          </Field>
-          <Field label="Description">
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={inputCls} />
-          </Field>
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={saving} className={btnPrimary}>
-              {saving ? "Saving…" : "Save changes"}
-            </button>
-            <button
-              type="button"
-              disabled={deleting}
-              className={btnDanger}
-              onClick={async () => {
-                if (!window.confirm("Delete this campaign? Its tracked emails stay, but lose the campaign link.")) return;
-                setDeleting(true);
-                try {
-                  await api(`/api/campaigns/${params.id}`, { method: "DELETE" });
-                  router.push("/campaigns");
-                } catch (err: unknown) {
-                  setError(err instanceof Error ? err.message : "Failed to delete campaign");
-                  setDeleting(false);
-                }
-              }}
-            >
-              {deleting ? "Deleting…" : "Delete campaign"}
-            </button>
-            <Link href="/campaigns" className={btnSecondary}>Back to list</Link>
-          </div>
-        </form>
-      </section>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Edit campaign</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="space-y-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setError(null);
+              setSaving(true);
+              try {
+                await api(`/api/campaigns/${params.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name, description: description || null }),
+                });
+                router.push("/campaigns");
+              } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Failed to save campaign");
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            <ErrorAlert message={error} />
+            <div className="space-y-2">
+              <Label htmlFor="campaign-name">Campaign name *</Label>
+              <Input id="campaign-name" required value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="campaign-description">Description</Label>
+              <Textarea id="campaign-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button type="submit" disabled={saving}>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleting}
+                onClick={async () => {
+                  if (!window.confirm("Delete this campaign? Its tracked emails stay, but lose the campaign link.")) return;
+                  setDeleting(true);
+                  try {
+                    await api(`/api/campaigns/${params.id}`, { method: "DELETE" });
+                    router.push("/campaigns");
+                  } catch (err: unknown) {
+                    setError(err instanceof Error ? err.message : "Failed to delete campaign");
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {deleting ? "Deleting…" : "Delete campaign"}
+              </Button>
+              <Button type="button" variant="outline" asChild>
+                <Link href="/campaigns">Back to list</Link>
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

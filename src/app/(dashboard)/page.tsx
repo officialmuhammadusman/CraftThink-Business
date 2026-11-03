@@ -256,11 +256,20 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900">Dashboard</h1>
-      <p className="mt-1 text-base text-slate-500">
-        Live counts from the database — zero means no records yet, not a
-        placeholder.
-      </p>
+      <div className="flex items-start gap-3">
+        <span aria-hidden="true" className="mt-1 flex shrink-0 items-end gap-1">
+          <span className="block h-6 w-1.5 rounded-full bg-brand-600" />
+          <span className="block h-4 w-1.5 rounded-full bg-indigo-400" />
+          <span className="block h-2.5 w-1.5 rounded-full bg-indigo-300" />
+        </span>
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
+          <p className="mt-1 text-base text-slate-500">
+            Live counts from the database — zero means no records yet, not a
+            placeholder.
+          </p>
+        </div>
+      </div>
 
       {/* COVERAGE — headline view: which places are covered, and which
           businesses have been sent cold email to. No charts here. */}
@@ -389,7 +398,7 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => setStatusFilter(value)}
                   aria-pressed={statusFilter === value}
-                  className={`rounded-full border px-3 py-1 text-sm font-medium ${
+                  className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-base font-medium ${
                     statusFilter === value
                       ? "border-brand-600 bg-brand-600 text-white"
                       : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"

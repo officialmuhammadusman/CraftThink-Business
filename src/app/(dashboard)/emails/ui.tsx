@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
 export const inputCls =
-  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
+  "flex min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base text-slate-900";
 export const selectCls = inputCls;
 export const btnPrimary =
-  "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50";
+  "inline-flex min-h-12 items-center justify-center rounded-md bg-brand-600 px-4 py-3 text-base font-medium text-white hover:bg-brand-700 disabled:opacity-50";
 export const btnSecondary =
-  "rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50";
+  "inline-flex min-h-12 items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50";
 export const btnDanger =
-  "rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50";
+  "inline-flex min-h-12 items-center justify-center rounded-md bg-red-600 px-4 py-3 text-base font-medium text-white hover:bg-red-700 disabled:opacity-50";
 
 export const TOKEN_HELP =
   "Placeholders you can use in a template subject or body: {{company}} = company name, {{contactName}} = contact full name, {{senderName}} = your name. When you pick a template while recording an email, these are replaced with the real values. Templates never send anything on their own.";
@@ -143,7 +143,7 @@ export function StatusBadge({
 export function ErrorAlert({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p role="alert" className="rounded-md bg-red-50 px-3 py-3 text-base text-red-700">
       {message}
     </p>
   );
@@ -160,9 +160,9 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-base font-medium text-slate-700">{label}</span>
       <span className="mt-1 block">{children}</span>
-      {hint ? <span className="mt-1 block text-xs text-slate-500">{hint}</span> : null}
+      {hint ? <span className="mt-1 block text-sm text-slate-500">{hint}</span> : null}
     </label>
   );
 }

@@ -348,23 +348,23 @@ export default function CompaniesPage() {
             setPage(1);
           }}
           placeholder="Search name, website, city…"
-          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base"
+          className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base"
         />
-        <Input value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }} placeholder="Country" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base" />
-        <Input value={industry} onChange={(e) => { setIndustry(e.target.value); setPage(1); }} placeholder="Industry" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base" />
-        <Input value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} placeholder="Status" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base" />
-        <select value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base">
+        <Input value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }} placeholder="Country" className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base" />
+        <Input value={industry} onChange={(e) => { setIndustry(e.target.value); setPage(1); }} placeholder="Industry" className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base" />
+        <Input value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} placeholder="Status" className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base" />
+        <select value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }} className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
           <option value="">Any priority</option>
           <option value="LOW">LOW</option>
           <option value="MEDIUM">MEDIUM</option>
           <option value="HIGH">HIGH</option>
         </select>
-        <select value={contacted} onChange={(e) => { setContacted(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base">
+        <select value={contacted} onChange={(e) => { setContacted(e.target.value); setPage(1); }} className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
           <option value="">Contacted or not</option>
           <option value="true">Contacted</option>
           <option value="false">Not contacted</option>
         </select>
-        <select value={tag} onChange={(e) => { setTag(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base">
+        <select value={tag} onChange={(e) => { setTag(e.target.value); setPage(1); }} className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
           <option value="">Any tag</option>
           {tags.map((t) => (
             <option key={t.id} value={t.name}>

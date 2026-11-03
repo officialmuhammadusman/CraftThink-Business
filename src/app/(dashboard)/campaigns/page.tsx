@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, btnPrimary, inputCls, ErrorAlert } from "../emails/ui";
+import { api, ErrorAlert } from "../emails/ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
+import Pager from "@/components/Pager";
 
 type Campaign = {
   id: string;
@@ -26,10 +34,7 @@ export default function CampaignsPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const params = new URLSearchParams({
-      page: String(page),
-      limit: "20",
-    });
+    const params = new URLSearchParams({ page: String(page), limit: "20" });
     if (appliedSearch) params.set("search", appliedSearch);
     api<{ items: Campaign[]; total: number; totalPages: number }>(
       `/api/campaigns?${params}`,
@@ -54,86 +59,85 @@ export default function CampaignsPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Campaigns</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Tracking groups for outreach. Campaigns here organise recorded
-            emails — they do not send anything.
-          </p>
-        </div>
-        <Link href="/campaigns/new" className={btnPrimary}>
-          New campaign
-        </Link>
-      </div>
-
-      <form
-        className="mt-4 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setPage(1);
-          setAppliedSearch(search.trim());
-        }}
-      >
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search campaigns…"
-          className={inputCls}
-        />
-        <button type="submit" className={btnPrimary}>
-          Search
-        </button>
-      </form>
-
+      <PageHeader
+        title="Campaigns"
+        subtitle="Tracking groups for outreach. Campaigns here organise recorded emails — they do not send anything."
+        action={
+          <Button asChild>
+            <Link href="/campaigns/new">New campaign</Link>
+          </Button>
+        }
+      />
+      <Card className="mt-6">
+        <CardContent className="p-4 sm:p-6">
+          <form
+            className="flex flex-col gap-2 sm:flex-row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setPage(1);
+              setAppliedSearch(search.trim());
+            }}
+          >
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search campaigns…"
+              aria-label="Search campaigns"
+              className="flex-1"
+            />
+            <Button type="submit">Search</Button>
+          </form>
+        </CardContent>
+      </Card>
       <div className="mt-4">
         <ErrorAlert message={error} />
         {loading ? (
-          <p className="text-sm text-slate-500">Loading campaigns…</p>
+          <div className="space-y-3" aria-label="Loading campaigns">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
         ) : items.length === 0 ? (
-          <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-            No campaigns yet. Create the first one to group tracked emails.
-          </p>
+          <EmptyState
+            image="/images/empty-campaigns.svg"
+            title="No campaigns yet"
+            description="Create the first one to group tracked emails."
+            action={
+              <Button asChild>
+                <Link href="/campaigns/new">New campaign</Link>
+              </Button>
+            }
+          />
         ) : (
           <>
-            <p className="text-xs text-slate-500">{total} campaign(s)</p>
+            <p className="text-base text-slate-500">{total} campaign(s)</p>
             <ul className="mt-3 space-y-3">
               {items.map((c) => (
-                <li key={c.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <Link href={`/campaigns/${c.id}`} className="text-base font-medium text-brand-700 hover:underline">
-                    {c.name}
-                  </Link>
-                  {c.description ? (
-                    <p className="mt-1 text-sm text-slate-600">{c.description}</p>
-                  ) : null}
-                  <p className="mt-2 text-xs text-slate-500">
-                    Owner: {c.owner?.name ?? "Unassigned"} · {c._count.emailActivities}{" "}
-                    tracked email(s) · Created {new Date(c.createdAt).toLocaleDateString()}
-                  </p>
+                <li key={c.id}>
+                  <Card>
+                    <CardContent className="p-4 sm:p-6">
+                      <Link
+                        href={`/campaigns/${c.id}`}
+                        className="inline-flex min-h-12 items-center text-base font-medium text-brand-600 hover:underline"
+                      >
+                        {c.name}
+                      </Link>
+                      {c.description ? (
+                        <p className="mt-1 text-base text-slate-600">{c.description}</p>
+                      ) : null}
+                      <p className="mt-2 flex flex-wrap items-center gap-2 text-base text-slate-500">
+                        <span>Owner: {c.owner?.name ?? "Unassigned"}</span>
+                        <Badge variant="secondary">
+                          {c._count.emailActivities} tracked email(s)
+                        </Badge>
+                        <span>Created {new Date(c.createdAt).toLocaleDateString()}</span>
+                      </p>
+                    </CardContent>
+                  </Card>
                 </li>
               ))}
             </ul>
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-slate-500">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage(page + 1)}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
+            <Pager page={page} totalPages={totalPages} onPage={setPage} />
           </>
         )}
       </div>

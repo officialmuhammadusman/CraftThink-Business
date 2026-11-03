@@ -2,6 +2,15 @@
 
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
 
 type FollowUp = {
   id: string;
@@ -17,12 +26,8 @@ type Company = { id: string; name: string };
 type Contact = { id: string; fullName: string };
 type Assignee = { id: string; name: string; role: string };
 
-const inputCls =
-  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
-const btnPrimary =
-  "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50";
-const btnSecondary =
-  "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50";
+const selectCls =
+  "flex min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600";
 
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
@@ -151,67 +156,72 @@ function FollowUpsInner() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900">Follow-ups</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        One next action per prospect. Overdue is computed from the due date, so a
-        pending item past its date never hides.
-      </p>
-      {notice && <p className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">{notice}</p>}
+      <PageHeader
+        title="Follow-ups"
+        subtitle="One next action per prospect. Overdue is computed from the due date, so a pending item past its date never hides."
+      />
+      {notice && <p className="mt-4 rounded-md bg-slate-100 px-3 py-3 text-base text-slate-700">{notice}</p>}
 
-      <form onSubmit={handleCreate} className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">New follow-up</h2>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="text-sm font-medium text-slate-700">
-            Company *
-            <select required value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value, contactId: "" })} className={`${inputCls} mt-1 font-normal`}>
-              <option value="">Select company…</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium text-slate-700">
-            Contact (optional)
-            <select value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })} className={`${inputCls} mt-1 font-normal`}>
-              <option value="">None</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>{c.fullName}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium text-slate-700">
-            Due date *
-            <input required type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-          </label>
-          <label className="text-sm font-medium text-slate-700">
-            Reason
-            <input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. Second email due" className={`${inputCls} mt-1 font-normal`} />
-          </label>
-          <label className="text-sm font-medium text-slate-700">
-            Assigned to
-            <select value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })} className={`${inputCls} mt-1 font-normal`}>
-              <option value="">Me</option>
-              {assignees.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
-            Notes
-            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className={`${inputCls} mt-1 font-normal`} />
-          </label>
-        </div>
-        <button type="submit" className={`${btnPrimary} mt-4`}>Create follow-up</button>
-      </form>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>New follow-up</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="fu-company">Company *</Label>
+                <select id="fu-company" required value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value, contactId: "" })} className={selectCls}>
+                  <option value="">Select company…</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fu-contact">Contact (optional)</Label>
+                <select id="fu-contact" value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })} className={selectCls}>
+                  <option value="">None</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>{c.fullName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fu-due">Due date *</Label>
+                <Input id="fu-due" required type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fu-reason">Reason</Label>
+                <Input id="fu-reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. Second email due" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fu-assignee">Assigned to</Label>
+                <select id="fu-assignee" value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })} className={selectCls}>
+                  <option value="">Me</option>
+                  {assignees.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="fu-notes">Notes</Label>
+                <Textarea id="fu-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
+              </div>
+            </div>
+            <Button type="submit" className="w-full sm:w-auto">Create follow-up</Button>
+          </form>
+        </CardContent>
+      </Card>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Follow-up view">
         {views.map((v) => (
           <button
             key={v.value}
             type="button"
             onClick={() => setView(v.value)}
             aria-pressed={view === v.value}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${
+            className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-base font-medium ${
               view === v.value
                 ? "border-brand-600 bg-brand-600 text-white"
                 : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
@@ -223,38 +233,54 @@ function FollowUpsInner() {
       </div>
 
       {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-3 text-base text-red-700">{error}</p>
       )}
       {loading ? (
-        <p className="mt-4 text-sm text-slate-500">Loading follow-ups…</p>
+        <div className="mt-4 space-y-3" aria-label="Loading follow-ups">
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+        </div>
       ) : items.length === 0 ? (
-        <p className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-          No follow-ups in this view. Create one above.
-        </p>
+        <div className="mt-4">
+          <EmptyState
+            image="/images/empty-followups.svg"
+            title="No follow-ups in this view"
+            description="Create one above so the next action never slips."
+          />
+        </div>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <ul className="mt-4 space-y-3">
           {items.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <span className="text-sm">
-                <span className="font-medium text-slate-900">{item.company.name}</span>
-                {item.contact && <span className="text-slate-500"> · {item.contact.fullName}</span>}
-                <span className="block text-slate-600">
-                  Due {new Date(item.dueDate).toLocaleDateString()} · {item.status}
-                  {item.assignedTo ? ` · ${item.assignedTo.name}` : ""}
-                  {item.reason ? ` · ${item.reason}` : ""}
-                </span>
-                {item.notes && <span className="block text-xs text-slate-500">{item.notes}</span>}
-              </span>
-              <span className="flex gap-2">
-                {item.status !== "DONE" && (
-                  <button type="button" onClick={() => markDone(item)} className={btnSecondary}>
-                    Mark done
-                  </button>
-                )}
-                <button type="button" onClick={() => handleDelete(item)} className="text-sm font-medium text-red-600 hover:underline">
-                  Delete
-                </button>
-              </span>
+            <li key={item.id}>
+              <Card>
+                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+                  <div className="min-w-0">
+                    <p className="text-base font-medium text-slate-900">
+                      {item.company.name}
+                      {item.contact && <span className="font-normal text-slate-500"> · {item.contact.fullName}</span>}
+                    </p>
+                    <p className="mt-1 flex flex-wrap items-center gap-2 text-base text-slate-600">
+                      <span>Due {new Date(item.dueDate).toLocaleDateString()}</span>
+                      <Badge variant={item.status === "DONE" ? "success" : "warning"}>
+                        {item.status.replaceAll("_", " ")}
+                      </Badge>
+                      {item.assignedTo ? <span>· {item.assignedTo.name}</span> : null}
+                      {item.reason ? <span>· {item.reason}</span> : null}
+                    </p>
+                    {item.notes && <p className="mt-1 text-sm text-slate-500">{item.notes}</p>}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">
+                    {item.status !== "DONE" && (
+                      <Button type="button" variant="outline" onClick={() => markDone(item)}>
+                        Mark done
+                      </Button>
+                    )}
+                    <Button type="button" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => handleDelete(item)}>
+                      Delete
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </li>
           ))}
         </ul>
@@ -265,7 +291,7 @@ function FollowUpsInner() {
 
 export default function FollowUpsPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-slate-500">Loading follow-ups…</p>}>
+    <Suspense fallback={<p className="text-base text-slate-500">Loading follow-ups…</p>}>
       <FollowUpsInner />
     </Suspense>
   );

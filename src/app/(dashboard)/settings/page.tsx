@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-
-const inputCls =
-  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
-const btnPrimary =
-  "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import PageHeader from "@/components/PageHeader";
 
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
@@ -59,34 +59,37 @@ export default function SettingsPage() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold text-slate-900">Settings</h1>
-      {me && (
-        <p className="mt-1 text-sm text-slate-500">
-          Signed in as {me.name} ({me.email}) — {me.role.replaceAll("_", " ")}
-        </p>
-      )}
-      <form onSubmit={handleSubmit} className="mt-6 max-w-md rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Change your password</h2>
-        <div className="mt-3 grid gap-3">
-          <label className="text-sm text-slate-600">
-            Current password
-            <input className={inputCls} type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
-          </label>
-          <label className="text-sm text-slate-600">
-            New password (min 8 characters)
-            <input className={inputCls} type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-          </label>
-          <label className="text-sm text-slate-600">
-            Confirm new password
-            <input className={inputCls} type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-          </label>
-        </div>
-        <button className={`${btnPrimary} mt-4`} type="submit" disabled={saving}>
-          {saving ? "Saving…" : "Change password"}
-        </button>
-        {notice && <p className="mt-2 text-sm text-slate-600">{notice}</p>}
-      </form>
+    <div className="max-w-xl">
+      <PageHeader
+        title="Settings"
+        subtitle={me ? `Signed in as ${me.name} (${me.email}) — ${me.role.replaceAll("_", " ")}` : undefined}
+      />
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Change your password</CardTitle>
+          <CardDescription>Your new password applies at your next sign-in.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Current password</Label>
+              <Input id="current-password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New password (min 8 characters)</Label>
+              <Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm new password</Label>
+              <Input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+            </div>
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+              {saving ? "Saving…" : "Change password"}
+            </Button>
+            {notice && <p className="text-base text-slate-600">{notice}</p>}
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
