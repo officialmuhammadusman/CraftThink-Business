@@ -390,7 +390,9 @@ export function DashboardShell({
         <div className="border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
           <CommandPalette items={navItems} />
         </div>
-        <main className="px-4 py-6 pb-28 sm:px-6 lg:pb-6">{children}</main>
+        {/* Content clears the mobile bottom tabs (64px) + the floating
+            +Create button that sticks 24px above them + safe-area inset. */}
+        <main className="px-4 py-6 pb-[calc(8.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:pb-6">{children}</main>
         <Toaster />
       </div>
 

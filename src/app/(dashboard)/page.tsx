@@ -669,7 +669,7 @@ export default function DashboardPage() {
                         setExpandedId(expandedId === c.id ? null : c.id)
                       }
                       aria-expanded={expandedId === c.id}
-                      className="block w-full rounded-md px-2 py-2 text-left hover:bg-slate-50"
+                      className="block min-h-12 w-full rounded-md px-2 py-2 text-left hover:bg-slate-50"
                     >
                       <span className="flex flex-wrap items-baseline justify-between gap-2">
                         <span className="text-base font-medium text-slate-900">

@@ -91,7 +91,7 @@ export default function NewTemplatePage() {
               <Textarea id="template-body" required value={body} onChange={(e) => setBody(e.target.value)} rows={10} />
               <FieldError message={fieldErrors.body} />
             </div>
-            <div className="sticky bottom-0 z-10 -mx-4 border-t border-slate-200 bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+            <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 -mx-4 border-t border-slate-200 bg-white px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
               <Button type="submit" disabled={saving} className="w-full sm:w-auto">
                 {saving ? "Creating…" : "Create template"}
               </Button>

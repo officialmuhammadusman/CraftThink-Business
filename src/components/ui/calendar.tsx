@@ -25,7 +25,7 @@ function Calendar({
         caption_label: "text-base font-medium",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
-          "size-10 bg-transparent p-0 opacity-50 hover:opacity-100 border border-slate-300 rounded-md inline-flex items-center justify-center",
+          "size-11 bg-transparent p-0 opacity-50 hover:opacity-100 border border-slate-300 rounded-md inline-flex items-center justify-center",
         ),
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
@@ -34,9 +34,9 @@ function Calendar({
         head_cell:
           "text-slate-500 rounded-md w-10 font-normal text-sm",
         row: "flex w-full mt-2",
-        cell: "h-10 w-10 text-center text-base p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-slate-100/50 [&:has([aria-selected])]:bg-slate-100 first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+        cell: "h-11 w-11 text-center text-base p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-slate-100/50 [&:has([aria-selected])]:bg-slate-100 first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
         day: cn(
-          "size-10 p-0 font-normal aria-selected:opacity-100 hover:bg-slate-100 rounded-md inline-flex items-center justify-center",
+          "size-11 p-0 font-normal aria-selected:opacity-100 hover:bg-slate-100 rounded-md inline-flex items-center justify-center",
         ),
         day_range_end: "day-range-end",
         day_selected:

@@ -383,7 +383,7 @@ export default function NewEmailPage() {
         </Button>
       </form>
 
-      <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white px-4 py-3 pb-[env(safe-area-inset-bottom)] md:hidden">
+      <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 -mx-4 mt-4 border-t border-slate-200 bg-white px-4 py-3 pb-[env(safe-area-inset-bottom)] md:hidden">
         <Button type="submit" form="record-email-form" disabled={saving} variant="default" className="w-full">
           {saving ? "Recording…" : "Record email"}
         </Button>

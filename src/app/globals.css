@@ -54,6 +54,22 @@
   }
 }
 
+/* Phone-only touch + overflow rules (desktop untouched):
+   - Dropdown menu rows (row actions, +Create menu, user menu, notifications)
+     get a full 44px tap row on phones; select items already carry min-h-12.
+   - Long emails, URLs, currency totals and names wrap inside their card
+     instead of pushing the page sideways on a 360px phone. */
+@media (max-width: 767px) {
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"] {
+    min-height: 2.75rem;
+  }
+  main {
+    overflow-wrap: anywhere;
+  }
+}
+
 /* Quote print view (browser print only, no PDF service): when printing,
    hide everything except the .quote-print section on the quote detail
    page, so Print quote produces a clean quote sheet. */

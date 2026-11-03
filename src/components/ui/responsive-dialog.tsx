@@ -61,19 +61,28 @@ export function ResponsiveDialog({
         <SheetContent
           side="bottom"
           className={cn(
-            "max-h-[92dvh] overflow-y-auto rounded-t-3xl pb-[env(safe-area-inset-bottom)]",
+            "flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl",
             className,
           )}
         >
-          <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-300" aria-hidden />
-          <SheetHeader className="text-left">
+          <div className="mx-auto mb-4 h-1.5 w-12 shrink-0 rounded-full bg-slate-300" aria-hidden />
+          <SheetHeader className="shrink-0 text-left">
             <SheetTitle>{title}</SheetTitle>
             {description ? (
               <SheetDescription>{description}</SheetDescription>
             ) : null}
           </SheetHeader>
-          <div className="mt-4">{children}</div>
-          {footer ? <SheetFooter className="mt-6">{footer}</SheetFooter> : null}
+          {/* Body scrolls inside the sheet; the footer below stays pinned
+              to the sheet's bottom edge, never pushed up by content and
+              never hidden behind the keyboard area or bottom nav. */}
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            {children}
+          </div>
+          {footer ? (
+            <div className="-mx-6 -mb-6 mt-6 shrink-0 border-t border-slate-200 bg-white px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              <SheetFooter className="mt-0">{footer}</SheetFooter>
+            </div>
+          ) : null}
         </SheetContent>
       </Sheet>
     );

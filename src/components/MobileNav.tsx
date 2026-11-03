@@ -61,7 +61,7 @@ export default function MobileNav({
               </Link>
             ))}
           </nav>
-          <div className="mt-auto border-t border-slate-200 pt-4">
+          <div className="mt-auto border-t border-slate-200 pt-4 pb-[env(safe-area-inset-bottom)]">
             <p className="truncate text-base font-medium text-slate-900">
               {userName}
             </p>
