@@ -2,10 +2,25 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams } from "next/navigation";
+import { toast } from "sonner";
+import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ErrorDialog } from "@/components/ui/responsive-dialog";
+import { FieldError, logicalDateErrors, zodFieldErrors } from "@/components/ui/field-error";
+import { taskSchema, taskCommentSchema } from "@/lib/validation";
 
 type Project = {
   id: string;
@@ -49,7 +64,20 @@ const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
-  return payload?.error ?? fallback;
+  return payload?.error ?? payload?.message ?? fallback;
+}
+
+/** Server-named field errors (fieldErrors / errors object) mapped onto fields. */
+function serverFieldErrors(payload: unknown): Record<string, string> | null {
+  if (!payload || typeof payload !== "object") return null;
+  const rec = (payload as Record<string, unknown>).fieldErrors ?? (payload as Record<string, unknown>).errors;
+  if (!rec || typeof rec !== "object" || Array.isArray(rec)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rec as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+    else if (Array.isArray(v) && typeof v[0] === "string") out[k] = v[0];
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 const emptyTask = {
@@ -70,7 +98,12 @@ export default function ProjectDetailPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [commentErrors, setCommentErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [commentSaving, setCommentSaving] = useState<string | null>(null);
+  const [confirmTask, setConfirmTask] = useState<Task | null>(null);
+  const [errorDialog, setErrorDialog] = useState<string | null>(null);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [meId, setMeId] = useState("");
   const [meRole, setMeRole] = useState("");
@@ -95,7 +128,9 @@ export default function ProjectDetailPage() {
       setProject(p.data as Project);
       setTasks(t.data.items as Task[]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load project");
+      const message = err instanceof Error ? err.message : "Failed to load project";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -157,12 +192,8 @@ export default function ProjectDetailPage() {
 
   async function handleTaskSubmit(event: FormEvent) {
     event.preventDefault();
-    setNotice(null);
-    if (!taskForm.title) {
-      setNotice("Task title is required.");
-      return;
-    }
-    const body = {
+    const parsed = taskSchema.safeParse({
+      projectId,
       title: taskForm.title,
       description: taskForm.description || null,
       assignedToId: taskForm.assignedToId || null,
@@ -171,23 +202,52 @@ export default function ProjectDetailPage() {
       deadline: taskForm.deadline || null,
       status: taskForm.status,
       progress: Number(taskForm.progress),
-    };
-    const url = editingTaskId
-      ? `/api/tasks/${editingTaskId}`
-      : `/api/projects/${projectId}/tasks`;
-    const response = await fetch(url, {
-      method: editingTaskId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
     });
-    if (!response.ok) {
-      setNotice(await readError(response, "Failed to save task"));
+    const errs = { ...zodFieldErrors(parsed), ...logicalDateErrors({ startDate: taskForm.startDate, deadline: taskForm.deadline }) };
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
       return;
     }
-    setNotice(editingTaskId ? "Task updated." : "Task created.");
-    setEditingTaskId(null);
-    setTaskForm(emptyTask);
-    load();
+    setFieldErrors({});
+    setSubmitting(true);
+    try {
+      const body = {
+        title: taskForm.title,
+        description: taskForm.description || null,
+        assignedToId: taskForm.assignedToId || null,
+        priority: taskForm.priority,
+        startDate: taskForm.startDate || null,
+        deadline: taskForm.deadline || null,
+        status: taskForm.status,
+        progress: Number(taskForm.progress),
+      };
+      const url = editingTaskId
+        ? `/api/tasks/${editingTaskId}`
+        : `/api/projects/${projectId}/tasks`;
+      const response = await fetch(url, {
+        method: editingTaskId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const mapped = serverFieldErrors(payload);
+        const message = payload?.error ?? payload?.message ?? "Failed to save task";
+        if (mapped) {
+          setFieldErrors(mapped);
+          toast.error("Please fix the highlighted fields.");
+        } else {
+          toast.error(message);
+        }
+        return;
+      }
+      toast.success(editingTaskId ? "Task updated." : "Task created.");
+      setEditingTaskId(null);
+      setTaskForm(emptyTask);
+      load();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function quickUpdate(task: Task, patch: Record<string, unknown>) {
@@ -197,41 +257,60 @@ export default function ProjectDetailPage() {
       body: JSON.stringify(patch),
     });
     if (!response.ok) {
-      setNotice(await readError(response, "Failed to update task"));
+      toast.error(await readError(response, "Failed to update task"));
       return;
     }
+    toast.success("Task updated.");
     load();
   }
 
   async function handleDeleteTask(task: Task) {
-    if (!window.confirm(`Delete task "${task.title}"?`)) return;
     const response = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
     if (!response.ok) {
-      setNotice(await readError(response, "Failed to delete task"));
+      const message = await readError(response, "Failed to delete task");
+      toast.error(message);
+      setErrorDialog(message);
       return;
     }
-    setNotice("Task deleted.");
+    toast.success("Task deleted.");
     load();
   }
 
   async function handleComment(taskId: string) {
     const body = (commentDraft[taskId] ?? "").trim();
-    if (!body) return;
-    const response = await fetch(`/api/tasks/${taskId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body }),
-    });
-    if (!response.ok) {
-      setNotice(await readError(response, "Failed to add comment"));
+    const parsed = taskCommentSchema.safeParse({ body });
+    if (!parsed.success) {
+      setCommentErrors((prev) => ({ ...prev, [taskId]: zodFieldErrors(parsed).body ?? "Comment is required." }));
       return;
     }
-    setCommentDraft((d) => ({ ...d, [taskId]: "" }));
-    loadComments(taskId);
-    load();
+    setCommentErrors((prev) => ({ ...prev, [taskId]: "" }));
+    setCommentSaving(taskId);
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      if (!response.ok) {
+        toast.error(await readError(response, "Failed to add comment"));
+        return;
+      }
+      toast.success("Comment added.");
+      setCommentDraft((d) => ({ ...d, [taskId]: "" }));
+      loadComments(taskId);
+      load();
+    } finally {
+      setCommentSaving(null);
+    }
   }
 
-  if (loading) return <p className="text-base text-slate-500">Loading project…</p>;
+  if (loading) return (
+    <div className="space-y-3" aria-label="Loading project">
+      <Skeleton className="h-24" />
+      <Skeleton className="h-20" />
+      <Skeleton className="h-20" />
+    </div>
+  );
   if (error) return <p className="text-base text-red-600">{error}</p>;
   if (!project) return <p className="text-base text-slate-500">Project not found.</p>;
 
@@ -267,8 +346,6 @@ export default function ProjectDetailPage() {
       <div className="mt-2 h-2 w-full max-w-md rounded-full bg-slate-200">
         <div className="h-2 rounded-full bg-brand-600" style={{ width: `${avgProgress}%` }} />
       </div>
-      {notice && <p className="mt-3 text-base text-slate-600">{notice}</p>}
-
       {canManageTasks && (
         <form onSubmit={handleTaskSubmit} className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-base font-semibold text-slate-900">{editingTaskId ? "Edit task" : "New task"}</h2>
@@ -276,47 +353,64 @@ export default function ProjectDetailPage() {
             <Label className="text-base text-slate-600 sm:col-span-2">
               Title
               <Input value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} />
+              <FieldError message={fieldErrors.title} />
             </Label>
             <Label className="text-base text-slate-600">
               Assigned to
-              <select className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base" value={taskForm.assignedToId} onChange={(e) => setTaskForm({ ...taskForm, assignedToId: e.target.value })}>
-                <option value="">Unassigned</option>
-                {assignees.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name} — {a.role.replaceAll("_", " ")}</option>
-                ))}
-              </select>
+              <Select value={taskForm.assignedToId || "__none"} onValueChange={(v) => setTaskForm({ ...taskForm, assignedToId: v === "__none" ? "" : v })}>
+                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">Unassigned</SelectItem>
+                  {assignees.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.name} — {a.role.replaceAll("_", " ")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldError message={fieldErrors.assignedToId} />
             </Label>
             <Label className="text-base text-slate-600">
               Priority
-              <select className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base" value={taskForm.priority} onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}>
-                {PRIORITIES.map((p) => (<option key={p} value={p}>{p}</option>))}
-              </select>
+              <Select value={taskForm.priority} onValueChange={(v) => setTaskForm({ ...taskForm, priority: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PRIORITIES.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              <FieldError message={fieldErrors.priority} />
             </Label>
             <Label className="text-base text-slate-600">
               Status
-              <select className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base" value={taskForm.status} onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}>
-                {TASK_STATUSES.map((s) => (<option key={s} value={s}>{s.replaceAll("_", " ")}</option>))}
-              </select>
+              <Select value={taskForm.status} onValueChange={(v) => setTaskForm({ ...taskForm, status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TASK_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              <FieldError message={fieldErrors.status} />
             </Label>
             <Label className="text-base text-slate-600">
               Progress (%)
               <Input type="number" min="0" max="100" value={taskForm.progress} onChange={(e) => setTaskForm({ ...taskForm, progress: e.target.value })} />
+              <FieldError message={fieldErrors.progress} />
             </Label>
             <Label className="text-base text-slate-600">
               Start date
-              <Input type="date" value={taskForm.startDate} onChange={(e) => setTaskForm({ ...taskForm, startDate: e.target.value })} />
+              <DatePicker className="min-h-12 text-base" value={taskForm.startDate} onChange={(v) => setTaskForm({ ...taskForm, startDate: v })} placeholder="Pick a start date" />
+              <FieldError message={fieldErrors.startDate} />
             </Label>
             <Label className="text-base text-slate-600">
               Deadline
-              <Input type="date" value={taskForm.deadline} onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })} />
+              <DatePicker className="min-h-12 text-base" value={taskForm.deadline} onChange={(v) => setTaskForm({ ...taskForm, deadline: v })} placeholder="Pick a deadline" />
+              <FieldError message={fieldErrors.deadline} />
             </Label>
             <Label className="text-base text-slate-600 sm:col-span-2">
               Description
               <Textarea rows={2} value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} />
+              <FieldError message={fieldErrors.description} />
             </Label>
           </div>
           <div className="mt-4 flex gap-2">
-            <Button variant="default" type="submit">{editingTaskId ? "Save changes" : "Create task"}</Button>
+            <Button variant="default" type="submit" disabled={submitting}>{submitting ? "Saving…" : editingTaskId ? "Save changes" : "Create task"}</Button>
             {editingTaskId && <Button variant="outline" type="button" onClick={() => { setEditingTaskId(null); setTaskForm(emptyTask); }}>Cancel</Button>}
           </div>
         </form>
@@ -324,9 +418,16 @@ export default function ProjectDetailPage() {
 
       <h2 className="mt-8 text-lg font-semibold text-slate-900">Tasks ({tasks.length})</h2>
       {tasks.length === 0 && (
-        <p className="mt-2 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-base text-slate-500">
-          No tasks yet for this project.
-        </p>
+        <div className="mt-2 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center">
+          <p className="text-base text-slate-500">
+            No tasks yet for this project.
+          </p>
+          {canManageTasks && (
+            <Button type="button" variant="outline" className="mt-3" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+              Create a task
+            </Button>
+          )}
+        </div>
       )}
       <div className="mt-3 grid gap-4">
         {tasks.map((task) => {
@@ -349,18 +450,30 @@ export default function ProjectDetailPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {canEdit && (
-                    <>
-                      <select
-                        className="min-h-12 rounded-md border border-slate-300 bg-white px-2 py-1 text-base"
-                        value={task.status}
-                        onChange={(e) => quickUpdate(task, { status: e.target.value })}
-                      >
-                        {TASK_STATUSES.map((s) => (<option key={s} value={s}>{s.replaceAll("_", " ")}</option>))}
-                      </select>
-                      <Button variant="outline" onClick={() => startEditTask(task)}>Edit</Button>
-                    </>
+                    <Select value={task.status} onValueChange={(v) => quickUpdate(task, { status: v })}>
+                      <SelectTrigger aria-label={`Status for ${task.title}`} className="w-auto"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TASK_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
                   )}
-                  {isManagerOrAdmin && <Button variant="outline" onClick={() => handleDeleteTask(task)}>Delete</Button>}
+                  {(canEdit || isManagerOrAdmin) && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="min-h-12 min-w-12" aria-label={`Actions for ${task.title}`}>
+                          <MoreHorizontal className="size-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {canEdit && (
+                          <DropdownMenuItem onClick={() => startEditTask(task)}>Edit</DropdownMenuItem>
+                        )}
+                        {isManagerOrAdmin && (
+                          <DropdownMenuItem className="text-red-600" onClick={() => setConfirmTask(task)}>Delete</DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                   <Button variant="outline" onClick={() => toggleComments(task.id)}>
                     Comments ({comments[task.id]?.length ?? task._count.comments})
                   </Button>
@@ -377,14 +490,16 @@ export default function ProjectDetailPage() {
                   {(comments[task.id] ?? []).length === 0 && (
                     <p className="text-base text-slate-400">No comments yet.</p>
                   )}
-                  <div className="mt-2 flex gap-2">
-                    <Input
-                     
-                      placeholder="Add a progress note…"
-                      value={commentDraft[task.id] ?? ""}
-                      onChange={(e) => setCommentDraft((d) => ({ ...d, [task.id]: e.target.value }))}
-                    />
-                    <Button variant="default" type="button" onClick={() => handleComment(task.id)}>Add</Button>
+                  <div className="mt-2">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Add a progress note…"
+                        value={commentDraft[task.id] ?? ""}
+                        onChange={(e) => setCommentDraft((d) => ({ ...d, [task.id]: e.target.value }))}
+                      />
+                      <Button variant="default" type="button" disabled={commentSaving === task.id} onClick={() => handleComment(task.id)}>{commentSaving === task.id ? "Adding…" : "Add"}</Button>
+                    </div>
+                    <FieldError message={commentErrors[task.id]} />
                   </div>
                 </div>
               )}
@@ -392,6 +507,24 @@ export default function ProjectDetailPage() {
           );
         })}
       </div>
+
+      <ConfirmDialog
+        open={confirmTask !== null}
+        onOpenChange={(o) => !o && setConfirmTask(null)}
+        title="Delete task?"
+        description={confirmTask ? `Delete task "${confirmTask.title}"?` : ""}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (confirmTask) await handleDeleteTask(confirmTask);
+        }}
+      />
+      <ErrorDialog
+        open={errorDialog !== null}
+        onOpenChange={(o) => !o && setErrorDialog(null)}
+        title="Could not delete task"
+        message={errorDialog ?? ""}
+        hint="The task was not deleted. Check the message above and try again."
+      />
     </div>
   );
 }

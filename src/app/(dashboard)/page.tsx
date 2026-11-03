@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -14,6 +14,12 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AreaTrendChart,
+  BarCountChart,
+  Sparkline,
+} from "@/components/ui/chart";
+import { DateRangePicker } from "@/components/ui/date-picker";
 
 type CountRow = { status: string; count: number };
 type MeetingRow = {
@@ -101,23 +107,47 @@ type Coverage = {
   companies: CoverageCompany[];
 };
 
+type Charts = {
+  range: { from: string; to: string };
+  emailsOverTime: { label: string; value: number }[];
+  funnel: { label: string; value: number }[];
+  leadsByCountry: { label: string; value: number }[];
+  leadsByIndustry: { label: string; value: number }[];
+  dealsByStage: { label: string; value: number }[];
+  followUpsDueByDay: { label: string; value: number }[];
+  wonRevenue: { label: string; value: number }[] | null;
+};
+
 type StatusFilter = "ALL" | "CONTACTED" | "NOT_CONTACTED" | "REPLIED" | "INTERESTED";
 
-function StatCard({
+function isoToday(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function KpiCard({
   label,
   value,
   hint,
+  spark,
 }: {
   label: string;
-  value: number;
+  value: string;
   hint: string;
+  spark?: number[];
 }) {
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-base font-medium text-slate-500">{label}</p>
-        <p className="mt-1 text-3xl font-semibold text-slate-900">{value}</p>
-        <p className="mt-1 text-base text-slate-500">{hint}</p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-base font-medium text-slate-500">{label}</p>
+            <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{value}</p>
+            <p className="mt-1 text-sm text-slate-500">{hint}</p>
+          </div>
+          {spark ? <Sparkline data={spark} /> : null}
+        </div>
       </CardContent>
     </Card>
   );
@@ -135,24 +165,24 @@ function Breakdown({
   return (
     <Card>
       <CardContent className="p-4">
-      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-      {rows.length === 0 ? (
-        <p className="mt-2 text-base text-slate-500">{emptyText}</p>
-      ) : (
-        <ul className="mt-3 space-y-2">
-          {rows.map((row) => (
-            <li
-              key={row.status}
-              className="flex items-center justify-between text-base"
-            >
-              <span className="text-slate-600">
-                {row.status.replaceAll("_", " ")}
-              </span>
-              <span className="font-medium text-slate-900">{row.count}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        {rows.length === 0 ? (
+          <p className="mt-2 text-base text-slate-500">{emptyText}</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {rows.map((row) => (
+              <li
+                key={row.status}
+                className="flex items-center justify-between text-base"
+              >
+                <span className="text-slate-600">
+                  {row.status.replaceAll("_", " ")}
+                </span>
+                <span className="font-medium text-slate-900">{row.count}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </CardContent>
     </Card>
   );
@@ -163,6 +193,10 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
   const [coverageError, setCoverageError] = useState<string | null>(null);
+  const [charts, setCharts] = useState<Charts | null>(null);
+  const [chartsError, setChartsError] = useState<string | null>(null);
+  const [preset, setPreset] = useState<"7d" | "30d" | "90d" | "custom">("30d");
+  const [range, setRange] = useState({ from: isoToday(-29), to: isoToday(0) });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [countryFilter, setCountryFilter] = useState("ALL");
   const [industryFilter, setIndustryFilter] = useState("ALL");
@@ -183,13 +217,6 @@ export default function DashboardPage() {
           setError(err instanceof Error ? err.message : "Failed to load stats");
         }
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
     fetch("/api/dashboard/coverage")
       .then(async (response) => {
         const payload = await response.json().catch(() => null);
@@ -209,6 +236,61 @@ export default function DashboardPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setChartsError(null);
+    fetch(`/api/dashboard/charts?from=${range.from}&to=${range.to}`)
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(payload?.error ?? "Failed to load charts");
+        }
+        if (!cancelled) setCharts(payload.data as Charts);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setChartsError(
+            err instanceof Error ? err.message : "Failed to load charts",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range]);
+
+  function applyPreset(value: "7d" | "30d" | "90d" | "custom") {
+    setPreset(value);
+    if (value === "7d") setRange({ from: isoToday(-6), to: isoToday(0) });
+    if (value === "30d") setRange({ from: isoToday(-29), to: isoToday(0) });
+    if (value === "90d") setRange({ from: isoToday(-89), to: isoToday(0) });
+  }
+
+  const countries = useMemo(
+    () =>
+      coverage
+        ? [...new Set(coverage.companies.map((c) => c.country))].sort()
+        : [],
+    [coverage],
+  );
+  const industries = useMemo(
+    () =>
+      coverage
+        ? [...new Set(coverage.companies.map((c) => c.industry))].sort()
+        : [],
+    [coverage],
+  );
+  const filteredCompanies = (coverage?.companies ?? []).filter((c) => {
+    if (statusFilter === "CONTACTED" && !c.contacted) return false;
+    if (statusFilter === "NOT_CONTACTED" && c.contacted) return false;
+    if (statusFilter === "REPLIED" && !c.hasReplied) return false;
+    if (statusFilter === "INTERESTED" && !c.interested) return false;
+    if (countryFilter !== "ALL" && c.country !== countryFilter) return false;
+    if (industryFilter !== "ALL" && c.industry !== industryFilter)
+      return false;
+    return true;
+  });
 
   if (error) {
     return (
@@ -235,45 +317,172 @@ export default function DashboardPage() {
     );
   }
 
-  // Coverage filters (applied to the per-business list below the group
-  // table; the group table itself always shows the full-coverage totals).
-  const countries = coverage
-    ? [...new Set(coverage.companies.map((c) => c.country))].sort()
-    : [];
-  const industries = coverage
-    ? [...new Set(coverage.companies.map((c) => c.industry))].sort()
-    : [];
-  const filteredCompanies = (coverage?.companies ?? []).filter((c) => {
-    if (statusFilter === "CONTACTED" && !c.contacted) return false;
-    if (statusFilter === "NOT_CONTACTED" && c.contacted) return false;
-    if (statusFilter === "REPLIED" && !c.hasReplied) return false;
-    if (statusFilter === "INTERESTED" && !c.interested) return false;
-    if (countryFilter !== "ALL" && c.country !== countryFilter) return false;
-    if (industryFilter !== "ALL" && c.industry !== industryFilter)
-      return false;
-    return true;
-  });
+  const dealsWon =
+    stats.dealsByStage.find((r) => r.status === "WON")?.count ?? 0;
+  const positiveRate =
+    stats.responses > 0
+      ? `${Math.round((stats.positiveResponses / stats.responses) * 100)}%`
+      : "—";
+  const emailSpark = charts?.emailsOverTime.map((p) => p.value) ?? [];
 
   return (
-    <div>
-      <div className="flex items-start gap-3">
-        <span aria-hidden="true" className="mt-1 flex shrink-0 items-end gap-1">
-          <span className="block h-6 w-1.5 rounded-full bg-brand-600" />
-          <span className="block h-4 w-1.5 rounded-full bg-indigo-400" />
-          <span className="block h-2.5 w-1.5 rounded-full bg-indigo-300" />
-        </span>
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-          <p className="mt-1 text-base text-slate-500">
-            Live counts from the database — zero means no records yet, not a
-            placeholder.
-          </p>
+    <div className="space-y-6">
+      {/* Header + date range */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-3">
+          <span aria-hidden="true" className="mt-1 flex shrink-0 items-end gap-1">
+            <span className="block h-6 w-1.5 rounded-full bg-brand-600" />
+            <span className="block h-4 w-1.5 rounded-full bg-indigo-400" />
+            <span className="block h-2.5 w-1.5 rounded-full bg-indigo-300" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
+            <p className="mt-1 text-base text-slate-500">
+              Live counts from the database — zero means no records yet, not a
+              placeholder.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Select
+            value={preset}
+            onValueChange={(v) => applyPreset(v as "7d" | "30d" | "90d" | "custom")}
+          >
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue placeholder="Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="30d">Last 30 days</SelectItem>
+              <SelectItem value="90d">Last 90 days</SelectItem>
+              <SelectItem value="custom">Custom range</SelectItem>
+            </SelectContent>
+          </Select>
+          {preset === "custom" ? (
+            <DateRangePicker
+              value={range}
+              onChange={setRange}
+              className="w-full sm:w-auto"
+            />
+          ) : null}
         </div>
       </div>
 
-      {/* COVERAGE — headline view: which places are covered, and which
-          businesses have been sent cold email to. No charts here. */}
-      <Card className="mt-6"><CardContent className="p-4">
+      {/* KPI strip: exactly 4 cards, then the chart grid. Other counts live
+          in the breakdown cards below so the strip stays scannable. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Leads" value={String(stats.totalCompanies)} hint="All companies in the pipeline" />
+        <KpiCard label="Emails sent" value={String(stats.emailsSent)} hint="Sent, delivered, replied, or followed up" spark={emailSpark} />
+        <KpiCard label="Positive rate" value={positiveRate} hint="Positive replies out of all responses" />
+        <KpiCard label="Deals won" value={String(dealsWon)} hint="Deals in the Won stage" />
+      </div>
+
+      {/* Charts */}
+      <div>
+        <h2 className="text-xl font-semibold text-slate-900">Trends</h2>
+        <p className="mt-1 text-base text-slate-500">
+          Charts use the date range above and only your permitted records.
+        </p>
+        {chartsError ? (
+          <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-base text-red-700">
+            {chartsError}
+          </p>
+        ) : !charts ? (
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Skeleton className="h-72" />
+            <Skeleton className="h-72" />
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
+            <Card className="lg:col-span-8">
+              <CardHeader>
+                <CardTitle>Emails sent over time</CardTitle>
+                <CardDescription>
+                  Tracked emails per day, {charts.range.from} to {charts.range.to}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AreaTrendChart data={charts.emailsOverTime} label="Emails sent" />
+              </CardContent>
+            </Card>
+            <Card className="lg:col-span-4">
+              <CardHeader>
+                <CardTitle>Response funnel</CardTitle>
+                <CardDescription>
+                  Distinct businesses at each stage, from tracked emails
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BarCountChart data={charts.funnel} label="Businesses" layout="vertical" />
+                <p className="mt-3 text-sm tabular-nums text-slate-500">
+                  Reply rate:{" "}
+                  {charts.funnel[0]?.value
+                    ? `${Math.round(((charts.funnel[1]?.value ?? 0) / charts.funnel[0].value) * 100)}%`
+                    : "—"}
+                  {" · "}Positive rate:{" "}
+                  {charts.funnel[1]?.value
+                    ? `${Math.round(((charts.funnel[2]?.value ?? 0) / charts.funnel[1].value) * 100)}%`
+                    : "—"}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="lg:col-span-4">
+              <CardHeader>
+                <CardTitle>Leads by country</CardTitle>
+                <CardDescription>Top countries in your company list</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BarCountChart data={charts.leadsByCountry} label="Companies" layout="vertical" />
+              </CardContent>
+            </Card>
+            <Card className="lg:col-span-4">
+              <CardHeader>
+                <CardTitle>Leads by industry</CardTitle>
+                <CardDescription>Top industries in your company list</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BarCountChart data={charts.leadsByIndustry} label="Companies" layout="vertical" />
+              </CardContent>
+            </Card>
+            <Card className="lg:col-span-4">
+              <CardHeader>
+                <CardTitle>Deals by stage</CardTitle>
+                <CardDescription>How many deals sit in each pipeline stage</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BarCountChart data={charts.dealsByStage} label="Deals" />
+              </CardContent>
+            </Card>
+            <Card className={charts.wonRevenue ? "lg:col-span-8" : "lg:col-span-12"}>
+              <CardHeader>
+                <CardTitle>Follow-ups due, next 14 days</CardTitle>
+                <CardDescription>Pending follow-ups per day</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AreaTrendChart data={charts.followUpsDueByDay} label="Follow-ups due" />
+              </CardContent>
+            </Card>
+            {charts.wonRevenue ? (
+              <Card className="lg:col-span-4">
+                <CardHeader>
+                  <CardTitle>Won deal value by month</CardTitle>
+                  <CardDescription>
+                    Final price (or estimated budget) for won deals, by
+                    expected close month. Shown only because won deals with
+                    budget figures exist.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <BarCountChart data={charts.wonRevenue} label="Value (USD)" />
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      {/* COVERAGE — headline view */}
+      <Card><CardContent className="p-4">
         <h2 className="text-base font-semibold text-slate-900">
           Coverage — places covered &amp; businesses contacted
         </h2>
@@ -357,9 +566,9 @@ export default function DashboardPage() {
                     <TableHead className="py-2 pr-3">Country</TableHead>
                     <TableHead className="py-2 pr-3">City</TableHead>
                     <TableHead className="py-2 pr-3">Industry</TableHead>
-                    <TableHead className="py-2 pr-3">Discovered</TableHead>
-                    <TableHead className="py-2 pr-3">Contacted</TableHead>
-                    <TableHead className="py-2">Not yet contacted</TableHead>
+                    <TableHead className="py-2 pr-3 text-right tabular-nums">Discovered</TableHead>
+                    <TableHead className="py-2 pr-3 text-right tabular-nums">Contacted</TableHead>
+                    <TableHead className="py-2 text-right tabular-nums">Not yet contacted</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -371,9 +580,9 @@ export default function DashboardPage() {
                       <TableCell className="py-2 pr-3">{g.country}</TableCell>
                       <TableCell className="py-2 pr-3">{g.city}</TableCell>
                       <TableCell className="py-2 pr-3">{g.industry}</TableCell>
-                      <TableCell className="py-2 pr-3 font-medium">{g.discovered}</TableCell>
-                      <TableCell className="py-2 pr-3">{g.contacted}</TableCell>
-                      <TableCell className="py-2">{g.notContacted}</TableCell>
+                      <TableCell className="py-2 pr-3 font-medium tabular-nums text-right">{g.discovered}</TableCell>
+                      <TableCell className="py-2 pr-3 tabular-nums text-right">{g.contacted}</TableCell>
+                      <TableCell className="py-2 tabular-nums text-right">{g.notContacted}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -396,13 +605,10 @@ export default function DashboardPage() {
                 <Button
                   key={value}
                   type="button"
+                  variant={statusFilter === value ? "default" : "outline"}
                   onClick={() => setStatusFilter(value)}
                   aria-pressed={statusFilter === value}
-                  className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-base font-medium ${
-                    statusFilter === value
-                      ? "border-brand-600 bg-brand-600 text-white"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                  }`}
+                  className="rounded-full"
                 >
                   {label}
                 </Button>
@@ -452,13 +658,13 @@ export default function DashboardPage() {
               <ul className="mt-3 divide-y divide-slate-100">
                 {filteredCompanies.map((c) => (
                   <li key={c.id} className="py-3">
-                    <Button
+                    <button
                       type="button"
                       onClick={() =>
                         setExpandedId(expandedId === c.id ? null : c.id)
                       }
                       aria-expanded={expandedId === c.id}
-                      className="block w-full text-left"
+                      className="block w-full rounded-md px-2 py-2 text-left hover:bg-slate-50"
                     >
                       <span className="flex flex-wrap items-baseline justify-between gap-2">
                         <span className="text-base font-medium text-slate-900">
@@ -500,7 +706,7 @@ export default function DashboardPage() {
                         {" · "}Tap to{" "}
                         {expandedId === c.id ? "hide" : "see"} timeline
                       </span>
-                    </Button>
+                    </button>
                     {expandedId === c.id ? (
                       <div className="mt-2 rounded-md bg-slate-50 p-3 text-base">
                         {c.emails.length === 0 ? (
@@ -541,50 +747,8 @@ export default function DashboardPage() {
         )}
       </CardContent></Card>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Companies"
-          value={stats.totalCompanies}
-          hint="All companies in the pipeline"
-        />
-        <StatCard
-          label="Emails sent"
-          value={stats.emailsSent}
-          hint="Sent, delivered, replied, or followed up"
-        />
-        <StatCard
-          label="Responses"
-          value={stats.responses}
-          hint={`${stats.positiveResponses} positive · ${stats.negativeResponses} negative`}
-        />
-        <StatCard
-          label="Active projects"
-          value={stats.activeProjects}
-          hint="Planning, in progress, review, or testing"
-        />
-        <StatCard
-          label="Follow-ups due today"
-          value={stats.followUpsDueToday}
-          hint="Pending follow-ups due today"
-        />
-        <StatCard
-          label="Follow-ups overdue"
-          value={stats.followUpsOverdue}
-          hint="Pending follow-ups past their due date"
-        />
-        <StatCard
-          label="Upcoming meetings"
-          value={stats.upcomingMeetingsCount}
-          hint="Scheduled meetings from now on"
-        />
-        <StatCard
-          label="Deals in pipeline"
-          value={stats.dealsByStage.reduce((sum, row) => sum + row.count, 0)}
-          hint="Across all deal stages"
-        />
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {/* Breakdowns + activity */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Breakdown
           title="Companies by status"
           rows={stats.companiesByStatus}
@@ -599,6 +763,35 @@ export default function DashboardPage() {
           title="Emails by status"
           rows={stats.emailsByStatus}
           emptyText="No email activity yet."
+        />
+        <Breakdown
+          title="Responses"
+          rows={[
+            { status: "RESPONSES", count: stats.responses },
+            { status: "POSITIVE", count: stats.positiveResponses },
+            { status: "NEGATIVE", count: stats.negativeResponses },
+          ]}
+          emptyText="No responses yet."
+        />
+        <Breakdown
+          title="Follow-ups"
+          rows={[
+            { status: "DUE_TODAY", count: stats.followUpsDueToday },
+            { status: "OVERDUE", count: stats.followUpsOverdue },
+          ]}
+          emptyText="No follow-ups due or overdue."
+        />
+        <Breakdown
+          title="Projects & meetings"
+          rows={[
+            { status: "ACTIVE_PROJECTS", count: stats.activeProjects },
+            { status: "UPCOMING_MEETINGS", count: stats.upcomingMeetingsCount },
+            {
+              status: "DEALS_TOTAL",
+              count: stats.dealsByStage.reduce((sum, row) => sum + row.count, 0),
+            },
+          ]}
+          emptyText="No projects or meetings yet."
         />
         <Card><CardContent className="p-4">
           <h2 className="text-base font-semibold text-slate-900">

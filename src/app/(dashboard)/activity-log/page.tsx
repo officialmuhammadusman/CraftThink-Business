@@ -1,18 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ResponsiveDialog } from "@/components/ui/responsive-dialog";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import Pager from "@/components/Pager";
-
-const selectCls =
-  "flex min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base text-slate-900";
 
 type Entry = {
   id: string;
@@ -47,6 +47,12 @@ export default function ActivityLogPage() {
   const [actorSearch, setActorSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  function applyEntityType(value: string) {
+    setEntityType(value === "all" ? "" : value);
+    setPage(1);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,7 +66,9 @@ export default function ActivityLogPage() {
       setItems(payload.data.items as Entry[]);
       setTotalPages(payload.data.pagination.totalPages as number);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load activity log");
+      const message = err instanceof Error ? err.message : "Failed to load activity log";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -83,24 +91,19 @@ export default function ActivityLogPage() {
         title="Activity log"
         subtitle="Newest first. Admins see everything; other roles see only their own actions. Every create, update, delete and stage change is recorded here."
       />
-      <Card className="mt-6">
+      <Card className="mt-6 hidden md:block">
         <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-6">
           <div className="space-y-2">
             <Label htmlFor="activity-entity">Entity type</Label>
-            <select
-              id="activity-entity"
-              value={entityType}
-              onChange={(e) => {
-                setEntityType(e.target.value);
-                setPage(1);
-              }}
-              className={selectCls}
-            >
-              <option value="">All types</option>
-              {ENTITY_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+            <Select value={entityType || "all"} onValueChange={applyEntityType}>
+              <SelectTrigger id="activity-entity"><SelectValue placeholder="All types" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                {ENTITY_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="activity-search">Filter by actor or action</Label>
@@ -113,6 +116,46 @@ export default function ActivityLogPage() {
           </div>
         </CardContent>
       </Card>
+      <div className="mt-6 md:hidden">
+        <Button type="button" variant="outline" className="w-full" onClick={() => setFiltersOpen(true)}>
+          Filters{entityType || actorSearch ? " (active)" : ""}
+        </Button>
+      </div>
+      <ResponsiveDialog
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        title="Filters"
+        description="Filter the activity log by entity type, actor or action."
+        footer={
+          <Button type="button" className="w-full" onClick={() => setFiltersOpen(false)}>
+            Done
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="activity-entity-sheet">Entity type</Label>
+            <Select value={entityType || "all"} onValueChange={applyEntityType}>
+              <SelectTrigger id="activity-entity-sheet"><SelectValue placeholder="All types" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                {ENTITY_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="activity-search-sheet">Filter by actor or action</Label>
+            <Input
+              id="activity-search-sheet"
+              value={actorSearch}
+              onChange={(e) => setActorSearch(e.target.value)}
+              placeholder="Filter by actor or action…"
+            />
+          </div>
+        </div>
+      </ResponsiveDialog>
 
       {error && (
         <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-3 text-base text-red-700">{error}</p>
@@ -128,6 +171,19 @@ export default function ActivityLogPage() {
             image="/images/empty-activity.svg"
             title="No activity matches these filters"
             description="Try a different entity type or search term."
+            action={
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEntityType("");
+                  setActorSearch("");
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </Button>
+            }
           />
         </div>
       ) : (

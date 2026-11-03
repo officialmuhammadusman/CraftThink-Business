@@ -1,13 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
+import { FieldError, logicalDateErrors, zodFieldErrors } from "@/components/ui/field-error";
+import { emailActivitySchema } from "@/lib/validation";
+import {
   api,
-        Field,
+  Field,
   ErrorAlert,
   EMAIL_STATUSES,
   TOKEN_HELP,
@@ -59,6 +70,7 @@ export default function NewEmailPage() {
   const [followUpDate, setFollowUpDate] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   // Base lookups (campaigns, templates, users, first companies).
@@ -131,8 +143,65 @@ export default function NewEmailPage() {
     if (contact) setRecipientEmail(contact.email);
   };
 
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setFieldErrors({});
+    const parsed = emailActivitySchema.safeParse({
+      companyId,
+      contactId: contactId || null,
+      campaignId: campaignId || null,
+      templateId: templateId || null,
+      recipientEmail,
+      senderEmail: senderEmail || null,
+      subject,
+      body,
+      sequenceNumber,
+      status,
+      sentAt: sentAt || null,
+      followUpDate: followUpDate || null,
+      assignedToId: assignedToId || null,
+    });
+    const logical = logicalDateErrors({ followUpDate: followUpDate || undefined });
+    const errors = { ...zodFieldErrors(parsed), ...logical };
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setSaving(true);
+    try {
+      const created = await api<{ id: string }>("/api/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          contactId: contactId || null,
+          campaignId: campaignId || null,
+          templateId: templateId || null,
+          recipientEmail,
+          senderEmail: senderEmail || null,
+          subject,
+          body,
+          sequenceNumber,
+          status,
+          sentAt: fromLocalInput(sentAt),
+          followUpDate: followUpDate || null,
+          assignedToId: assignedToId || null,
+        }),
+      });
+      toast.success("Email recorded.");
+      router.push(`/emails/${created.id}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to record email";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl pb-4">
       <h1 className="text-xl font-semibold text-slate-900">Record an email</h1>
       <p className="mt-1 text-base text-slate-500">
         Tracking only: this records an email that was sent separately through
@@ -144,42 +213,9 @@ export default function NewEmailPage() {
       </div>
 
       <form
+        id="record-email-form"
         className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setError(null);
-          if (!companyId) {
-            setError("Company is required");
-            return;
-          }
-          setSaving(true);
-          try {
-            const created = await api<{ id: string }>("/api/emails", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                companyId,
-                contactId: contactId || null,
-                campaignId: campaignId || null,
-                templateId: templateId || null,
-                recipientEmail,
-                senderEmail: senderEmail || null,
-                subject,
-                body,
-                sequenceNumber,
-                status,
-                sentAt: fromLocalInput(sentAt),
-                followUpDate: followUpDate || null,
-                assignedToId: assignedToId || null,
-              }),
-            });
-            router.push(`/emails/${created.id}`);
-          } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Failed to record email");
-          } finally {
-            setSaving(false);
-          }
-        }}
+        onSubmit={handleSubmit}
       >
         <ErrorAlert message={error} />
         <Field label="Search company">
@@ -187,89 +223,171 @@ export default function NewEmailPage() {
             value={companySearch}
             onChange={(e) => setCompanySearch(e.target.value)}
             placeholder="Type to search companies…"
-           
           />
         </Field>
-        <Field label="Company *">
-          <select required value={companyId} onChange={(e) => { setCompanyId(e.target.value); setContactId(""); }} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
-            <option value="">Select a company…</option>
-            {(lookups?.companies ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}{c.website ? ` (${c.website})` : ""}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Contact (filtered by company)">
-          <select value={contactId} onChange={(e) => onContactChange(e.target.value)} disabled={!companyId} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
-            <option value="">No contact / not listed</option>
-            {contacts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.fullName} ({c.email})
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Campaign (optional)">
-          <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
-            <option value="">No campaign</option>
-            {(lookups?.campaigns ?? []).map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Template (optional — prefills subject and body)" hint="Tokens are replaced with the chosen company, contact, and your name.">
-          <select value={templateId} onChange={(e) => onTemplateChange(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
-            <option value="">No template</option>
-            {(lookups?.templates ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}{t.industry ? ` — ${t.industry}` : ""}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Recipient email *">
-          <Input required type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} />
-        </Field>
-        <Field label="Sender email account" hint="The email account used to send it, e.g. the Gmail address used. Free text — this app does not connect to that account.">
-          <Input type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="you@example.com" />
-        </Field>
-        <Field label="Subject *">
-          <Input required value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </Field>
-        <Field label="Body *">
-          <Textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
-        </Field>
+        <div>
+          <Field label="Company *">
+            <Select
+              value={companyId || "none"}
+              onValueChange={(v) => {
+                const id = v === "none" ? "" : v;
+                setCompanyId(id);
+                setContactId("");
+              }}
+            >
+              <SelectTrigger className="min-h-12 text-base">
+                <SelectValue placeholder="Select a company…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Select a company…</SelectItem>
+                {(lookups?.companies ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}{c.website ? ` (${c.website})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <FieldError message={fieldErrors.companyId} />
+        </div>
+        <div>
+          <Field label="Contact (filtered by company)">
+            <Select
+              value={contactId || "none"}
+              onValueChange={(v) => onContactChange(v === "none" ? "" : v)}
+              disabled={!companyId}
+            >
+              <SelectTrigger className="min-h-12 text-base">
+                <SelectValue placeholder="No contact / not listed" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No contact / not listed</SelectItem>
+                {contacts.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.fullName} ({c.email})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <FieldError message={fieldErrors.contactId} />
+        </div>
+        <div>
+          <Field label="Campaign (optional)">
+            <Select value={campaignId || "none"} onValueChange={(v) => setCampaignId(v === "none" ? "" : v)}>
+              <SelectTrigger className="min-h-12 text-base">
+                <SelectValue placeholder="No campaign" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No campaign</SelectItem>
+                {(lookups?.campaigns ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <FieldError message={fieldErrors.campaignId} />
+        </div>
+        <div>
+          <Field label="Template (optional — prefills subject and body)" hint="Tokens are replaced with the chosen company, contact, and your name.">
+            <Select value={templateId || "none"} onValueChange={(v) => onTemplateChange(v === "none" ? "" : v)}>
+              <SelectTrigger className="min-h-12 text-base">
+                <SelectValue placeholder="No template" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No template</SelectItem>
+                {(lookups?.templates ?? []).map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}{t.industry ? ` — ${t.industry}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <FieldError message={fieldErrors.templateId} />
+        </div>
+        <div>
+          <Field label="Recipient email *">
+            <Input required type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} />
+          </Field>
+          <FieldError message={fieldErrors.recipientEmail} />
+        </div>
+        <div>
+          <Field label="Sender email account" hint="The email account used to send it, e.g. the Gmail address used. Free text — this app does not connect to that account.">
+            <Input type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="you@example.com" />
+          </Field>
+          <FieldError message={fieldErrors.senderEmail} />
+        </div>
+        <div>
+          <Field label="Subject *">
+            <Input required value={subject} onChange={(e) => setSubject(e.target.value)} />
+          </Field>
+          <FieldError message={fieldErrors.subject} />
+        </div>
+        <div>
+          <Field label="Body *">
+            <Textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
+          </Field>
+          <FieldError message={fieldErrors.body} />
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Date / time sent">
             <Input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
           </Field>
-          <Field label="Sequence number">
-            <Input type="number" min={1} value={sequenceNumber} onChange={(e) => setSequenceNumber(Number(e.target.value) || 1)} />
-          </Field>
-          <Field label="Status *">
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
-              {EMAIL_STATUSES.map((s) => (
-                <option key={s} value={s}>{s.replaceAll("_", " ")}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Follow-up date" hint="Creates a follow-up reminder automatically.">
-            <Input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
-          </Field>
+          <div>
+            <Field label="Sequence number">
+              <Input type="number" min={1} value={sequenceNumber} onChange={(e) => setSequenceNumber(Number(e.target.value) || 1)} />
+            </Field>
+            <FieldError message={fieldErrors.sequenceNumber} />
+          </div>
+          <div>
+            <Field label="Status *">
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="min-h-12 text-base">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EMAIL_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <FieldError message={fieldErrors.status} />
+          </div>
+          <div>
+            <Field label="Follow-up date" hint="Creates a follow-up reminder automatically.">
+              <DatePicker value={followUpDate} onChange={setFollowUpDate} placeholder="Pick a date" />
+            </Field>
+            <FieldError message={fieldErrors.followUpDate} />
+          </div>
         </div>
-        <Field label="Assigned employee">
-          <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
-            <option value="">Unassigned</option>
-            {(lookups?.users ?? []).map((u) => (
-              <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
-            ))}
-          </select>
-        </Field>
-        <Button type="submit" disabled={saving} variant="default">
+        <div>
+          <Field label="Assigned employee">
+            <Select value={assignedToId || "none"} onValueChange={(v) => setAssignedToId(v === "none" ? "" : v)}>
+              <SelectTrigger className="min-h-12 text-base">
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unassigned</SelectItem>
+                {(lookups?.users ?? []).map((u) => (
+                  <SelectItem key={u.id} value={u.id}>{u.name} ({u.email})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <FieldError message={fieldErrors.assignedToId} />
+        </div>
+        <Button type="submit" disabled={saving} variant="default" className="hidden md:inline-flex">
           {saving ? "Recording…" : "Record email"}
         </Button>
       </form>
+
+      <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white px-4 py-3 pb-[env(safe-area-inset-bottom)] md:hidden">
+        <Button type="submit" form="record-email-form" disabled={saving} variant="default" className="w-full">
+          {saving ? "Recording…" : "Record email"}
+        </Button>
+      </div>
     </div>
   );
 }

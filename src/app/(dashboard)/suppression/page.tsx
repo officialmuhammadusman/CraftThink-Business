@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { MoreHorizontal } from "lucide-react";
 import { api, ErrorAlert, useMe, fmtDateTime } from "../emails/ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +11,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ErrorDialog } from "@/components/ui/responsive-dialog";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import Pager from "@/components/Pager";
@@ -31,7 +41,8 @@ export default function SuppressionPage() {
   const [appliedSearch, setAppliedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [confirmRow, setConfirmRow] = useState<Row | null>(null);
+  const [errorDialog, setErrorDialog] = useState<string | null>(null);
 
   const [newEmail, setNewEmail] = useState("");
   const [newReason, setNewReason] = useState("");
@@ -80,23 +91,27 @@ export default function SuppressionPage() {
         body: JSON.stringify({ reason: editReason || null, scope: editScope }),
       });
       setEditingId(null);
-      setNotice("Entry updated.");
+      toast.success("Entry updated.");
       load(page, appliedSearch);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to update entry");
+      const message = err instanceof Error ? err.message : "Failed to update entry";
+      setError(message);
+      toast.error(message);
     } finally {
       setSavingEdit(false);
     }
   }
 
   async function removeEntry(row: Row) {
-    if (!window.confirm(`Remove ${row.email} from the suppression list? They could then be emailed again. Only do this if the suppression was a mistake.`)) return;
     try {
       await api(`/api/suppression/${row.id}`, { method: "DELETE" });
-      setNotice(`${row.email} removed from the suppression list.`);
+      toast.success(`${row.email} removed from the suppression list.`);
       load(page, appliedSearch);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to remove entry");
+      const message = err instanceof Error ? err.message : "Failed to remove entry";
+      setError(message);
+      toast.error(message);
+      setErrorDialog(message);
     }
   }
 
@@ -109,27 +124,33 @@ export default function SuppressionPage() {
         </span>
       );
     }
+    if (!canEdit && !canDelete) return null;
     return (
-      <span className="flex flex-col gap-2 sm:flex-row">
-        {canEdit ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setEditingId(row.id);
-              setEditReason(row.reason ?? "");
-              setEditScope(row.scope);
-            }}
-          >
-            Edit
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="icon" className="min-h-12 min-w-12" aria-label={`Actions for ${row.email}`}>
+            <MoreHorizontal className="size-5" />
           </Button>
-        ) : null}
-        {canDelete ? (
-          <Button type="button" variant="destructive" onClick={() => removeEntry(row)}>
-            Remove
-          </Button>
-        ) : null}
-      </span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {canEdit ? (
+            <DropdownMenuItem
+              onClick={() => {
+                setEditingId(row.id);
+                setEditReason(row.reason ?? "");
+                setEditScope(row.scope);
+              }}
+            >
+              Edit
+            </DropdownMenuItem>
+          ) : null}
+          {canDelete ? (
+            <DropdownMenuItem className="text-red-600" onClick={() => setConfirmRow(row)}>
+              Remove
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   }
 
@@ -163,7 +184,6 @@ export default function SuppressionPage() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 setError(null);
-                setNotice(null);
                 setCreating(true);
                 try {
                   await api("/api/suppression", {
@@ -173,10 +193,12 @@ export default function SuppressionPage() {
                   });
                   setNewEmail("");
                   setNewReason("");
-                  setNotice(`${newEmail} added to the suppression list.`);
+                  toast.success(`${newEmail} added to the suppression list.`);
                   load(page, appliedSearch);
                 } catch (err: unknown) {
-                  setError(err instanceof Error ? err.message : "Failed to add entry");
+                  const message = err instanceof Error ? err.message : "Failed to add entry";
+                  setError(message);
+                  toast.error(message);
                 } finally {
                   setCreating(false);
                 }
@@ -208,10 +230,6 @@ export default function SuppressionPage() {
         </p>
       )}
 
-      {notice ? (
-        <p className="mt-4 rounded-md bg-green-50 px-3 py-3 text-base text-green-700">{notice}</p>
-      ) : null}
-
       <Card className="mt-4">
         <CardContent className="p-4 sm:p-6">
           <form
@@ -240,6 +258,13 @@ export default function SuppressionPage() {
             image="/images/empty-generic.svg"
             title="No suppressed addresses yet"
             description="Suppressed addresses appear here when added above or when an email is marked Unsubscribed."
+            action={
+              canAdd ? (
+                <Button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+                  Add an entry
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <>
@@ -275,33 +300,33 @@ export default function SuppressionPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Scope</TableHead>
-                    <TableHead>Added</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="sticky top-0 bg-white">Email</TableHead>
+                    <TableHead className="sticky top-0 bg-white">Reason</TableHead>
+                    <TableHead className="sticky top-0 bg-white">Scope</TableHead>
+                    <TableHead className="sticky top-0 bg-white">Added</TableHead>
+                    <TableHead className="sticky top-0 bg-white">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map((row) => (
                     <TableRow key={row.id} className="align-top">
-                      <TableCell className="font-medium">{row.email}</TableCell>
-                      <TableCell>
+                      <TableCell className="py-2 font-medium">{row.email}</TableCell>
+                      <TableCell className="py-2">
                         {editingId === row.id ? (
                           <Input value={editReason} onChange={(e) => setEditReason(e.target.value)} aria-label="Reason" />
                         ) : (
                           row.reason ?? "—"
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2">
                         {editingId === row.id ? (
                           <Input value={editScope} onChange={(e) => setEditScope(e.target.value)} aria-label="Scope" />
                         ) : (
                           <Badge variant="purple">{row.scope}</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm text-slate-500">{fmtDateTime(row.createdAt)}</TableCell>
-                      <TableCell>{rowActions(row)}</TableCell>
+                      <TableCell className="py-2 text-sm text-slate-500">{fmtDateTime(row.createdAt)}</TableCell>
+                      <TableCell className="py-2">{rowActions(row)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -311,6 +336,28 @@ export default function SuppressionPage() {
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmRow !== null}
+        onOpenChange={(o) => !o && setConfirmRow(null)}
+        title="Remove from suppression list?"
+        description={
+          confirmRow
+            ? `Remove ${confirmRow.email} from the suppression list? They could then be emailed again. Only do this if the suppression was a mistake.`
+            : ""
+        }
+        confirmLabel="Remove"
+        onConfirm={async () => {
+          if (confirmRow) await removeEntry(confirmRow);
+        }}
+      />
+      <ErrorDialog
+        open={errorDialog !== null}
+        onOpenChange={(o) => !o && setErrorDialog(null)}
+        title="Could not remove entry"
+        message={errorDialog ?? ""}
+        hint="The entry was not removed. Check the message above and try again."
+      />
     </div>
   );
 }

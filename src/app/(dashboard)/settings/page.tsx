@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
+import { changePasswordSchema } from "@/lib/validation";
 import PageHeader from "@/components/PageHeader";
 
 async function readError(response: Response, fallback: string): Promise<string> {
@@ -17,7 +20,7 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -29,15 +32,16 @@ export default function SettingsPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setNotice(null);
-    if (newPassword.length < 8) {
-      setNotice("New password must be at least 8 characters.");
-      return;
-    }
+    const parsed = changePasswordSchema.safeParse({ currentPassword, newPassword });
+    const errs = zodFieldErrors(parsed);
     if (newPassword !== confirmPassword) {
-      setNotice("New passwords do not match.");
+      errs.confirmPassword = "New passwords do not match.";
+    }
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
       return;
     }
+    setFieldErrors({});
     setSaving(true);
     try {
       const response = await fetch("/api/auth/change-password", {
@@ -46,10 +50,10 @@ export default function SettingsPage() {
         body: JSON.stringify({ currentPassword, newPassword }),
       });
       if (!response.ok) {
-        setNotice(await readError(response, "Failed to change password"));
+        toast.error(await readError(response, "Failed to change password"));
         return;
       }
-      setNotice("Password changed. Use the new password at your next sign-in.");
+      toast.success("Password changed. Use the new password at your next sign-in.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -74,19 +78,21 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <Label htmlFor="current-password">Current password</Label>
               <Input id="current-password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+              <FieldError message={fieldErrors.currentPassword} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-password">New password (min 8 characters)</Label>
               <Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <FieldError message={fieldErrors.newPassword} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirm-password">Confirm new password</Label>
               <Input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+              <FieldError message={fieldErrors.confirmPassword} />
             </div>
             <Button type="submit" disabled={saving} className="w-full sm:w-auto">
               {saving ? "Saving…" : "Change password"}
             </Button>
-            {notice && <p className="text-base text-slate-600">{notice}</p>}
           </form>
         </CardContent>
       </Card>

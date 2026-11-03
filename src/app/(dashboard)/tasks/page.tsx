@@ -2,8 +2,14 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ResponsiveDialog } from "@/components/ui/responsive-dialog";
 
 type Task = {
   id: string;
@@ -32,7 +38,7 @@ export default function TasksPage() {
   const [items, setItems] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [meId, setMeId] = useState("");
 
   const load = useCallback(async () => {
@@ -47,7 +53,9 @@ export default function TasksPage() {
       const payload = await response.json();
       setItems(payload.data.items as Task[]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load tasks");
+      const message = err instanceof Error ? err.message : "Failed to load tasks";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -71,9 +79,10 @@ export default function TasksPage() {
       body: JSON.stringify(patch),
     });
     if (!response.ok) {
-      setNotice(await readError(response, "Failed to update task"));
+      toast.error(await readError(response, "Failed to update task"));
       return;
     }
+    toast.success("Task updated.");
     load();
   }
 
@@ -84,33 +93,74 @@ export default function TasksPage() {
         Every task you may see. Developers and designers only see tasks on
         their own projects, or assigned directly to them.
       </p>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className="mt-4 hidden flex-wrap items-center gap-3 md:flex">
         <Label className="text-base text-slate-600">
           Status{" "}
-          <select
-            className="min-h-12 rounded-md border border-slate-300 bg-white px-2 py-1 text-base"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">All</option>
-            {TASK_STATUSES.map((s) => (
-              <option key={s} value={s}>{s.replaceAll("_", " ")}</option>
-            ))}
-          </select>
+          <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="w-auto"><SelectValue placeholder="All" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {TASK_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Label>
-        <Label className="flex items-center gap-1 text-base text-slate-600">
-          <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />
+        <Label htmlFor="mine-only" className="flex items-center gap-1 py-2.5 text-base text-slate-600">
+          <Checkbox id="mine-only" checked={mineOnly} onCheckedChange={(v) => setMineOnly(v === true)} />
           Assigned to me only
         </Label>
       </div>
-      {notice && <p className="mt-3 text-base text-slate-600">{notice}</p>}
+      <div className="mt-4 md:hidden">
+        <Button type="button" variant="outline" className="w-full" onClick={() => setFiltersOpen(true)}>
+          Filters{(statusFilter || mineOnly) ? " (active)" : ""}
+        </Button>
+      </div>
+      <ResponsiveDialog
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        title="Filters"
+        description="Filter tasks by status or assignment."
+        footer={
+          <Button type="button" className="w-full" onClick={() => setFiltersOpen(false)}>
+            Done
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+              <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {TASK_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Label htmlFor="mine-only-sheet" className="flex items-center gap-2 py-2.5 text-base text-slate-600">
+            <Checkbox id="mine-only-sheet" checked={mineOnly} onCheckedChange={(v) => setMineOnly(v === true)} />
+            Assigned to me only
+          </Label>
+        </div>
+      </ResponsiveDialog>
       {error && <p className="mt-4 text-base text-red-600">{error}</p>}
-      {loading && <p className="mt-4 text-base text-slate-500">Loading tasks…</p>}
+      {loading && (
+        <div className="mt-4 space-y-3" aria-label="Loading tasks">
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+        </div>
+      )}
       {!loading && items.length === 0 && !error && (
         <Card className="mt-4">
           <CardContent className="p-6 text-center">
             <Image src="/images/empty-tasks.svg" alt="" width={320} height={220} className="mx-auto h-auto w-full max-w-xs" />
             <p className="mt-4 text-base text-slate-500">No tasks match this filter.</p>
+            <Button type="button" variant="outline" className="mt-4" asChild>
+              <a href="/projects">Browse projects</a>
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -131,13 +181,12 @@ export default function TasksPage() {
                 {task.description && <p className="mt-1 text-base text-slate-700">{task.description}</p>}
               </div>
               <div className="flex gap-2">
-                <select
-                  className="min-h-12 rounded-md border border-slate-300 bg-white px-2 py-1 text-base"
-                  value={task.status}
-                  onChange={(e) => quickUpdate(task, { status: e.target.value })}
-                >
-                  {TASK_STATUSES.map((s) => (<option key={s} value={s}>{s.replaceAll("_", " ")}</option>))}
-                </select>
+                <Select value={task.status} onValueChange={(v) => quickUpdate(task, { status: v })}>
+                  <SelectTrigger aria-label={`Status for ${task.title}`} className="w-auto"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TASK_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>))}
+                  </SelectContent>
+                </Select>
                 <a href={`/projects/${task.project.id}`} className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">Open project</a>
               </div>
             </div>

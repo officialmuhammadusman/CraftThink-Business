@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { toast } from "sonner";
 import { ErrorAlert } from "../ui";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { ErrorDialog } from "@/components/ui/responsive-dialog";
 
 type Report = {
   imported: number;
@@ -21,6 +23,7 @@ export default function EmailImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorDialog, setErrorDialog] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
   return (
@@ -60,6 +63,7 @@ export default function EmailImportPage() {
           setReport(null);
           if (!file) {
             setError("Choose a CSV file first");
+            toast.error("Choose a CSV file first");
             return;
           }
           setImporting(true);
@@ -72,11 +76,16 @@ export default function EmailImportPage() {
             });
             const payload = await response.json().catch(() => null);
             if (!response.ok) {
-              throw new Error(payload?.error ?? `Import failed (${response.status})`);
+              throw new Error(payload?.error ?? payload?.message ?? `Import failed (${response.status})`);
             }
-            setReport(payload.data as Report);
+            const data = payload.data as Report;
+            setReport(data);
+            toast.success(`Import complete: ${data.imported} imported, ${data.skippedDuplicates} duplicates skipped, ${data.skippedSuppressed} suppressed skipped, ${data.errors} errors.`);
           } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Import failed");
+            const message = err instanceof Error ? err.message : "Import failed";
+            setError(message);
+            toast.error(message);
+            setErrorDialog(message);
           } finally {
             setImporting(false);
           }
@@ -125,6 +134,14 @@ export default function EmailImportPage() {
           </Link>
         </section>
       ) : null}
+
+      <ErrorDialog
+        open={errorDialog !== null}
+        onOpenChange={(o) => !o && setErrorDialog(null)}
+        title="Import failed"
+        message={errorDialog ?? ""}
+        hint="Nothing was imported by the failed attempt. Check the file format and the message above, then try again."
+      />
     </div>
   );
 }

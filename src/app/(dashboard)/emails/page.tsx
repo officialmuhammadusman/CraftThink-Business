@@ -3,15 +3,26 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
+import { ResponsiveDialog } from "@/components/ui/responsive-dialog";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import {
   api,
-          ErrorAlert,
+  ErrorAlert,
   StatusBadge,
   EMAIL_STATUSES,
   TERMINAL_STATUSES,
@@ -52,6 +63,7 @@ export default function EmailsPage() {
   const [applied, setApplied] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +85,11 @@ export default function EmailsPage() {
         }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load emails");
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : "Failed to load emails";
+          setError(message);
+          toast.error(message);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -86,11 +102,170 @@ export default function EmailsPage() {
   const set = (key: keyof typeof EMPTY, value: string | boolean) =>
     setFilters((f) => ({ ...f, [key]: value }));
 
+  const applyFilters = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    setApplied(filters);
+    setShowFilters(false);
+  };
+
   const isDue = (item: Item) => {
     if (!item.followUpDate) return false;
     if (TERMINAL_STATUSES.includes(item.status)) return false;
     return new Date(item.followUpDate) <= new Date();
   };
+
+  const filterFields = (
+    <>
+      <Label className="block text-base font-medium text-slate-700">
+        Search
+        <Input value={filters.search} onChange={(e) => set("search", e.target.value)} placeholder="Subject, recipient, company…" className="mt-1" />
+      </Label>
+      <Label className="block text-base font-medium text-slate-700">
+        Status
+        <Select value={filters.status || "all"} onValueChange={(v) => set("status", v === "all" ? "" : v)}>
+          <SelectTrigger className="mt-1 min-h-12 text-base">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            {EMAIL_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label className="block text-base font-medium text-slate-700">
+        Campaign
+        <Select value={filters.campaignId || "all"} onValueChange={(v) => set("campaignId", v === "all" ? "" : v)}>
+          <SelectTrigger className="mt-1 min-h-12 text-base">
+            <SelectValue placeholder="All campaigns" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All campaigns</SelectItem>
+            {(data?.filters.campaigns ?? []).map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label className="block text-base font-medium text-slate-700">
+        Company
+        <Select value={filters.companyId || "all"} onValueChange={(v) => set("companyId", v === "all" ? "" : v)}>
+          <SelectTrigger className="mt-1 min-h-12 text-base">
+            <SelectValue placeholder="All companies" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All companies</SelectItem>
+            {(data?.filters.companies ?? []).map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label className="block text-base font-medium text-slate-700">
+        Assigned to
+        <Select value={filters.assignedToId || "all"} onValueChange={(v) => set("assignedToId", v === "all" ? "" : v)}>
+          <SelectTrigger className="mt-1 min-h-12 text-base">
+            <SelectValue placeholder="Anyone" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Anyone</SelectItem>
+            {(data?.filters.users ?? []).map((u) => (
+              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label className="block text-base font-medium text-slate-700">
+        Sent from
+        <span className="mt-1 block">
+          <DatePicker value={filters.from} onChange={(v) => set("from", v)} placeholder="Pick a date" />
+        </span>
+      </Label>
+      <Label className="block text-base font-medium text-slate-700">
+        Sent to
+        <span className="mt-1 block">
+          <DatePicker value={filters.to} onChange={(v) => set("to", v)} placeholder="Pick a date" />
+        </span>
+      </Label>
+      <div className="flex items-end gap-2 pb-2 text-base text-slate-700">
+        <Checkbox
+          id="follow-ups-due"
+          checked={filters.followUpsDue}
+          onCheckedChange={(v) => set("followUpsDue", v === true)}
+        />
+        <Label htmlFor="follow-ups-due" className="text-base text-slate-700">
+          Follow-ups due (follow-up date ≤ today, no reply/bounce/unsubscribe)
+        </Label>
+      </div>
+    </>
+  );
+
+  const columns: DataTableColumn<Item>[] = [
+    {
+      key: "subject",
+      label: "Subject",
+      sortable: true,
+      accessor: (item) => item.subject,
+      render: (item) => (
+        <>
+          <Link href={`/emails/${item.id}`} className="font-medium text-brand-700 hover:underline">
+            {item.subject}
+          </Link>
+          <span className="block text-sm text-slate-500">#{item.sequenceNumber} · {item.contact?.fullName ?? "No contact"}</span>
+        </>
+      ),
+    },
+    {
+      key: "recipient",
+      label: "Recipient",
+      sortable: true,
+      accessor: (item) => item.recipientEmail,
+      render: (item) => item.recipientEmail,
+    },
+    {
+      key: "company",
+      label: "Company / Campaign",
+      sortable: true,
+      accessor: (item) => item.company.name,
+      render: (item) => (
+        <>
+          {item.company.name}
+          <span className="block text-sm text-slate-500">{item.campaign?.name ?? "No campaign"}</span>
+        </>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      sortable: true,
+      accessor: (item) => item.status,
+      render: (item) => <StatusBadge status={item.status} suppressed={item.suppressed} />,
+    },
+    {
+      key: "sent",
+      label: "Sent",
+      sortable: true,
+      accessor: (item) => item.sentAt ?? "",
+      render: (item) => fmtDateTime(item.sentAt),
+    },
+    {
+      key: "followUp",
+      label: "Follow-up",
+      sortable: true,
+      accessor: (item) => item.followUpDate ?? "",
+      render: (item) =>
+        item.followUpDate ? (
+          <span className={isDue(item) ? "font-medium text-amber-700" : ""}>
+            {fmtDate(item.followUpDate)}
+            {isDue(item) ? " — due" : ""}
+          </span>
+        ) : (
+          "—"
+        ),
+    },
+  ];
 
   return (
     <div>
@@ -103,6 +278,9 @@ export default function EmailsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button type="button" variant="outline" className="md:hidden" onClick={() => setShowFilters(true)}>
+            Filters
+          </Button>
           <Link href="/emails/import" className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">
             Import CSV
           </Link>
@@ -113,65 +291,10 @@ export default function EmailsPage() {
       </div>
 
       <form
-        className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setPage(1);
-          setApplied(filters);
-        }}
+        className="mt-4 hidden grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 md:grid lg:grid-cols-4"
+        onSubmit={applyFilters}
       >
-        <Label className="block text-base font-medium text-slate-700">
-          Search
-          <Input value={filters.search} onChange={(e) => set("search", e.target.value)} placeholder="Subject, recipient, company…" className={`mt-1`} />
-        </Label>
-        <Label className="block text-base font-medium text-slate-700">
-          Status
-          <select value={filters.status} onChange={(e) => set("status", e.target.value)} className="mt-1 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
-            <option value="">All statuses</option>
-            {EMAIL_STATUSES.map((s) => (
-              <option key={s} value={s}>{statusLabel(s)}</option>
-            ))}
-          </select>
-        </Label>
-        <Label className="block text-base font-medium text-slate-700">
-          Campaign
-          <select value={filters.campaignId} onChange={(e) => set("campaignId", e.target.value)} className={`mt-1`}>
-            <option value="">All campaigns</option>
-            {(data?.filters.campaigns ?? []).map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </Label>
-        <Label className="block text-base font-medium text-slate-700">
-          Company
-          <select value={filters.companyId} onChange={(e) => set("companyId", e.target.value)} className={`mt-1`}>
-            <option value="">All companies</option>
-            {(data?.filters.companies ?? []).map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </Label>
-        <Label className="block text-base font-medium text-slate-700">
-          Assigned to
-          <select value={filters.assignedToId} onChange={(e) => set("assignedToId", e.target.value)} className={`mt-1`}>
-            <option value="">Anyone</option>
-            {(data?.filters.users ?? []).map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-        </Label>
-        <Label className="block text-base font-medium text-slate-700">
-          Sent from
-          <Input type="date" value={filters.from} onChange={(e) => set("from", e.target.value)} className={`mt-1`} />
-        </Label>
-        <Label className="block text-base font-medium text-slate-700">
-          Sent to
-          <Input type="date" value={filters.to} onChange={(e) => set("to", e.target.value)} className={`mt-1`} />
-        </Label>
-        <Label className="flex items-end gap-2 pb-2 text-base text-slate-700">
-          <input type="checkbox" checked={filters.followUpsDue} onChange={(e) => set("followUpsDue", e.target.checked)} />
-          Follow-ups due (follow-up date ≤ today, no reply/bounce/unsubscribe)
-        </Label>
+        {filterFields}
         <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
           <Button type="submit" variant="default">Apply filters</Button>
           <Button
@@ -187,6 +310,32 @@ export default function EmailsPage() {
           </Button>
         </div>
       </form>
+
+      <ResponsiveDialog
+        open={showFilters}
+        onOpenChange={setShowFilters}
+        title="Filters"
+        description="Apply filters to narrow the tracked emails list."
+      >
+        <form onSubmit={applyFilters} className="space-y-3">
+          {filterFields}
+          <div className="flex gap-2">
+            <Button type="submit" variant="default">Apply filters</Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setFilters(EMPTY);
+                setApplied(EMPTY);
+                setPage(1);
+                setShowFilters(false);
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+        </form>
+      </ResponsiveDialog>
 
       <div className="mt-4">
         <ErrorAlert message={error} />
@@ -241,48 +390,14 @@ export default function EmailsPage() {
                 </Card>
               ))}
             </div>
-            <div className="mt-3 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
-              <Table className="w-full min-w-[820px] text-left text-base">
-                <TableHeader>
-                  <TableRow className="border-b border-slate-200 text-sm uppercase tracking-wide text-slate-500">
-                    <TableHead className="px-3 py-2">Subject</TableHead>
-                    <TableHead className="px-3 py-2">Recipient</TableHead>
-                    <TableHead className="px-3 py-2">Company / Campaign</TableHead>
-                    <TableHead className="px-3 py-2">Status</TableHead>
-                    <TableHead className="px-3 py-2">Sent</TableHead>
-                    <TableHead className="px-3 py-2">Follow-up</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.items.map((item) => (
-                    <TableRow key={item.id} className="border-b border-slate-100 last:border-0">
-                      <TableCell className="px-3 py-2">
-                        <Link href={`/emails/${item.id}`} className="font-medium text-brand-700 hover:underline">
-                          {item.subject}
-                        </Link>
-                        <span className="block text-sm text-slate-500">#{item.sequenceNumber} · {item.contact?.fullName ?? "No contact"}</span>
-                      </TableCell>
-                      <TableCell className="px-3 py-2">{item.recipientEmail}</TableCell>
-                      <TableCell className="px-3 py-2">
-                        {item.company.name}
-                        <span className="block text-sm text-slate-500">{item.campaign?.name ?? "No campaign"}</span>
-                      </TableCell>
-                      <TableCell className="px-3 py-2"><StatusBadge status={item.status} suppressed={item.suppressed} /></TableCell>
-                      <TableCell className="px-3 py-2">{fmtDateTime(item.sentAt)}</TableCell>
-                      <TableCell className="px-3 py-2">
-                        {item.followUpDate ? (
-                          <span className={isDue(item) ? "font-medium text-amber-700" : ""}>
-                            {fmtDate(item.followUpDate)}
-                            {isDue(item) ? " — due" : ""}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="mt-3 hidden md:block">
+              <DataTable
+                rows={data.items}
+                columns={columns}
+                searchPlaceholder="Search within this page…"
+                initialPageSize={20}
+                emptyMessage="No tracked emails on this page."
+              />
             </div>
             <div className="mt-4 flex items-center gap-2">
               <Button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} variant="outline">

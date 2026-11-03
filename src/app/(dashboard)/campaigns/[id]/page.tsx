@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { api, ErrorAlert, StatusBadge, fmtDateTime } from "../../emails/ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,6 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ErrorDialog } from "@/components/ui/responsive-dialog";
+import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
+import { campaignSchema } from "@/lib/validation";
 import PageHeader from "@/components/PageHeader";
 
 type Activity = {
@@ -43,6 +48,24 @@ export default function CampaignDetailPage() {
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await api(`/api/campaigns/${params.id}`, { method: "DELETE" });
+      toast.success("Campaign deleted.");
+      router.push("/campaigns");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete campaign";
+      setError(message);
+      toast.error(message);
+      setErrorDialog(message);
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -143,25 +166,25 @@ export default function CampaignDetailPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Subject</TableHead>
-                      <TableHead>Recipient</TableHead>
-                      <TableHead>Company</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Sent</TableHead>
+                      <TableHead className="sticky top-0 bg-white">Subject</TableHead>
+                      <TableHead className="sticky top-0 bg-white">Recipient</TableHead>
+                      <TableHead className="sticky top-0 bg-white">Company</TableHead>
+                      <TableHead className="sticky top-0 bg-white">Status</TableHead>
+                      <TableHead className="sticky top-0 bg-white">Sent</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {detail.activities.map((a) => (
                       <TableRow key={a.id}>
-                        <TableCell>
+                        <TableCell className="py-2">
                           <Link href={`/emails/${a.id}`} className="font-medium text-brand-600 hover:underline">
                             {a.subject}
                           </Link>
                         </TableCell>
-                        <TableCell>{a.recipientEmail}</TableCell>
-                        <TableCell>{a.company.name}</TableCell>
-                        <TableCell><StatusBadge status={a.status} /></TableCell>
-                        <TableCell>{fmtDateTime(a.sentAt)}</TableCell>
+                        <TableCell className="py-2">{a.recipientEmail}</TableCell>
+                        <TableCell className="py-2">{a.company.name}</TableCell>
+                        <TableCell className="py-2"><StatusBadge status={a.status} /></TableCell>
+                        <TableCell className="py-2">{fmtDateTime(a.sentAt)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -182,6 +205,12 @@ export default function CampaignDetailPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               setError(null);
+              const parsed = campaignSchema.safeParse({ name, description: description || null });
+              if (!parsed.success) {
+                setFieldErrors(zodFieldErrors(parsed));
+                return;
+              }
+              setFieldErrors({});
               setSaving(true);
               try {
                 await api(`/api/campaigns/${params.id}`, {
@@ -189,9 +218,12 @@ export default function CampaignDetailPage() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ name, description: description || null }),
                 });
+                toast.success("Campaign saved.");
                 router.push("/campaigns");
               } catch (err: unknown) {
-                setError(err instanceof Error ? err.message : "Failed to save campaign");
+                const message = err instanceof Error ? err.message : "Failed to save campaign";
+                setError(message);
+                toast.error(message);
               } finally {
                 setSaving(false);
               }
@@ -201,10 +233,12 @@ export default function CampaignDetailPage() {
             <div className="space-y-2">
               <Label htmlFor="campaign-name">Campaign name *</Label>
               <Input id="campaign-name" required value={name} onChange={(e) => setName(e.target.value)} />
+              <FieldError message={fieldErrors.name} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="campaign-description">Description</Label>
               <Textarea id="campaign-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+              <FieldError message={fieldErrors.description} />
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button type="submit" disabled={saving}>
@@ -214,17 +248,7 @@ export default function CampaignDetailPage() {
                 type="button"
                 variant="destructive"
                 disabled={deleting}
-                onClick={async () => {
-                  if (!window.confirm("Delete this campaign? Its tracked emails stay, but lose the campaign link.")) return;
-                  setDeleting(true);
-                  try {
-                    await api(`/api/campaigns/${params.id}`, { method: "DELETE" });
-                    router.push("/campaigns");
-                  } catch (err: unknown) {
-                    setError(err instanceof Error ? err.message : "Failed to delete campaign");
-                    setDeleting(false);
-                  }
-                }}
+                onClick={() => setConfirmDelete(true)}
               >
                 {deleting ? "Deleting…" : "Delete campaign"}
               </Button>
@@ -235,6 +259,23 @@ export default function CampaignDetailPage() {
           </form>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={(o) => !o && setConfirmDelete(false)}
+        title="Delete campaign?"
+        description="Delete this campaign? Its tracked emails stay, but lose the campaign link."
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        busy={deleting}
+      />
+      <ErrorDialog
+        open={errorDialog !== null}
+        onOpenChange={(o) => !o && setErrorDialog(null)}
+        title="Could not delete campaign"
+        message={errorDialog ?? ""}
+        hint="The campaign was not deleted. Check the message above and try again."
+      />
     </div>
   );
 }

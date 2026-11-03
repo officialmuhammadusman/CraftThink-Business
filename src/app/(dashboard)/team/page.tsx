@@ -1,6 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
+import { memberCreateSchema } from "@/lib/validation";
 
 type Grant = { module: string; level: string };
 
@@ -58,7 +64,20 @@ const btnSecondary =
 
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
-  return payload?.error ?? fallback;
+  return payload?.error ?? payload?.message ?? fallback;
+}
+
+/** Server-named field errors (fieldErrors / errors object) mapped onto fields. */
+function serverFieldErrors(payload: unknown): Record<string, string> | null {
+  if (!payload || typeof payload !== "object") return null;
+  const rec = (payload as Record<string, unknown>).fieldErrors ?? (payload as Record<string, unknown>).errors;
+  if (!rec || typeof rec !== "object" || Array.isArray(rec)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rec as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+    else if (Array.isArray(v) && typeof v[0] === "string") out[k] = v[0];
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 function grantsToMap(grants: Grant[] | undefined): Record<string, string> {
@@ -77,7 +96,8 @@ export default function TeamPage() {
   const [perms, setPerms] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "DEVELOPER" });
 
@@ -99,7 +119,9 @@ export default function TeamPage() {
       }
       setPerms(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load team");
+      const message = err instanceof Error ? err.message : "Failed to load team";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -111,23 +133,37 @@ export default function TeamPage() {
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    setNotice(null);
-    if (!form.name || !form.email || form.password.length < 8) {
-      setNotice("Name, email and a password of at least 8 characters are required.");
+    const parsed = memberCreateSchema.safeParse(form);
+    if (!parsed.success) {
+      setFieldErrors(zodFieldErrors(parsed));
       return;
     }
-    const response = await fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!response.ok) {
-      setNotice(await readError(response, "Failed to create user"));
-      return;
+    setFieldErrors({});
+    setCreating(true);
+    try {
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const mapped = serverFieldErrors(payload);
+        const message = payload?.error ?? payload?.message ?? "Failed to create user";
+        if (mapped) {
+          setFieldErrors(mapped);
+          toast.error("Please fix the highlighted fields.");
+        } else {
+          toast.error(message);
+        }
+        return;
+      }
+      toast.success("Team member created. New members start with no access until you grant it in their permission table below. Share their login privately — never by email in this app.");
+      setForm({ name: "", email: "", password: "", role: "DEVELOPER" });
+      load();
+    } finally {
+      setCreating(false);
     }
-    setNotice("Team member created. New members start with no access until you grant it in their permission table below. Share their login privately — never by email in this app.");
-    setForm({ name: "", email: "", password: "", role: "DEVELOPER" });
-    load();
   }
 
   async function patchMember(member: Member, patch: Record<string, unknown>) {
@@ -137,16 +173,15 @@ export default function TeamPage() {
       body: JSON.stringify(patch),
     });
     if (!response.ok) {
-      setNotice(await readError(response, "Failed to update member"));
+      toast.error(await readError(response, "Failed to update member"));
       return;
     }
-    setNotice("Member updated.");
+    toast.success("Member updated.");
     load();
   }
 
   async function savePermission(member: Member, mod: string, level: string) {
     setSaving(`${member.id}:${mod}`);
-    setNotice(null);
     try {
       const response = await fetch(`/api/users/${member.id}/permissions`, {
         method: "PUT",
@@ -158,9 +193,9 @@ export default function TeamPage() {
         ...prev,
         [member.id]: { ...(prev[member.id] ?? {}), [mod]: level },
       }));
-      setNotice(`Permission saved: ${member.name} — ${label(mod)}: ${label(level)}.`);
+      toast.success(`Permission saved: ${member.name} — ${label(mod)}: ${label(level)}.`);
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Failed to save permission");
+      toast.error(err instanceof Error ? err.message : "Failed to save permission");
     } finally {
       setSaving(null);
     }
@@ -188,29 +223,53 @@ export default function TeamPage() {
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-slate-600">
             Full name
-            <input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <input id="member-name" className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <FieldError message={fieldErrors.name} />
           </label>
           <label className="text-sm text-slate-600">
             Email
             <input className={inputCls} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <FieldError message={fieldErrors.email} />
           </label>
           <label className="text-sm text-slate-600">
             Temporary password (min 8 characters — they change it in Settings)
             <input className={inputCls} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <FieldError message={fieldErrors.password} />
           </label>
           <label className="text-sm text-slate-600">
             Job title
-            <select className={inputCls} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              {MEMBER_ROLES.map((r) => (<option key={r} value={r}>{label(r)}</option>))}
-            </select>
+            <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MEMBER_ROLES.map((r) => (<SelectItem key={r} value={r}>{label(r)}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <FieldError message={fieldErrors.role} />
           </label>
         </div>
-        <button className={`${btnPrimary} mt-4`} type="submit">Create member</button>
-        {notice && <p className="mt-2 text-sm text-slate-600">{notice}</p>}
+        <button className={`${btnPrimary} mt-4`} type="submit" disabled={creating}>{creating ? "Creating…" : "Create member"}</button>
       </form>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-      {loading && <p className="mt-4 text-sm text-slate-500">Loading team…</p>}
+      {loading && (
+        <div className="mt-4 space-y-3" aria-label="Loading team">
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+        </div>
+      )}
+      {!loading && !error && items.length === 0 && (
+        <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center">
+          <p className="text-base text-slate-500">No team members yet.</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3"
+            onClick={() => document.getElementById("member-name")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+          >
+            Add your first member
+          </Button>
+        </div>
+      )}
       <div className="mt-4 grid gap-4">
         {items.map((m) => {
           const isSuperAdmin = m.role === "SUPER_ADMIN";
@@ -230,14 +289,12 @@ export default function TeamPage() {
                       Super Admin — full access, cannot be changed here
                     </span>
                   ) : (
-                    <select
-                      className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base"
-                      value={m.role}
-                      onChange={(e) => patchMember(m, { role: e.target.value })}
-                      aria-label={`Job title for ${m.name}`}
-                    >
-                      {MEMBER_ROLES.map((r) => (<option key={r} value={r}>{label(r)}</option>))}
-                    </select>
+                    <Select value={m.role} onValueChange={(v) => patchMember(m, { role: v })}>
+                      <SelectTrigger aria-label={`Job title for ${m.name}`} className="w-auto"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {MEMBER_ROLES.map((r) => (<SelectItem key={r} value={r}>{label(r)}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
                   )}
                   <button
                     className={btnSecondary}
@@ -258,16 +315,14 @@ export default function TeamPage() {
                   {MODULES.map((mod) => (
                     <label key={mod} className="text-sm text-slate-600">
                       {label(mod)}
-                      <select
-                        className={inputCls}
-                        value={memberPerms[mod] ?? "NONE"}
-                        disabled={saving === `${m.id}:${mod}`}
-                        onChange={(e) => savePermission(m, mod, e.target.value)}
-                      >
-                        {LEVELS.map((l) => (
-                          <option key={l.value} value={l.value}>{l.label}</option>
-                        ))}
-                      </select>
+                      <Select value={memberPerms[mod] ?? "NONE"} disabled={saving === `${m.id}:${mod}`} onValueChange={(v) => savePermission(m, mod, v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {LEVELS.map((l) => (
+                            <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </label>
                   ))}
                 </div>

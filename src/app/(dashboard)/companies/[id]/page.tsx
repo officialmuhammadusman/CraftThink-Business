@@ -2,10 +2,20 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  ResponsiveDialog,
+  ErrorDialog,
+} from "@/components/ui/responsive-dialog";
+import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { companySchema, contactSchema } from "@/lib/validation";
 
 type Detail = {
   id: string;
@@ -55,7 +65,6 @@ type Detail = {
   }[];
 };
 
-
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
   return payload?.error ?? fallback;
@@ -65,6 +74,10 @@ function fmt(date: string): string {
   return new Date(date).toLocaleString();
 }
 
+type PendingConfirm =
+  | { kind: "tag"; id: string; name: string }
+  | { kind: "contact"; id: string; name: string };
+
 export default function CompanyDetailPage({ params }: { params: { id: string } }) {
   const [company, setCompany] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,6 +85,8 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [edit, setEdit] = useState({ status: "", priority: "", city: "", country: "", industry: "", description: "" });
+  const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
+  const [editBusy, setEditBusy] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [contactForm, setContactForm] = useState({
     fullName: "",
@@ -82,6 +97,10 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
     isDecisionMaker: false,
     notes: "",
   });
+  const [contactFieldErrors, setContactFieldErrors] = useState<Record<string, string>>({});
+  const [contactBusy, setContactBusy] = useState(false);
+  const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,7 +120,9 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
       });
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load company");
+      const message = err instanceof Error ? err.message : "Failed to load company";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -113,19 +134,42 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
 
   async function saveEdit(event: FormEvent) {
     event.preventDefault();
+    if (!company) return;
     setNotice(null);
-    const response = await fetch(`/api/companies/${params.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(edit),
+    setEditFieldErrors({});
+    const parsed = companySchema.safeParse({
+      name: company.name,
+      status: edit.status,
+      priority: edit.priority,
+      city: edit.city || null,
+      country: edit.country || null,
+      industry: edit.industry || null,
+      description: edit.description || null,
     });
-    if (!response.ok) {
-      setNotice(await readError(response, "Could not save changes"));
+    if (!parsed.success) {
+      setEditFieldErrors(zodFieldErrors(parsed));
       return;
     }
-    setNotice("Saved.");
-    setEditing(false);
-    load();
+    setEditBusy(true);
+    try {
+      const response = await fetch(`/api/companies/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(edit),
+      });
+      if (!response.ok) {
+        const message = await readError(response, "Could not save changes");
+        setNotice(message);
+        toast.error(message);
+        return;
+      }
+      setNotice("Saved.");
+      toast.success("Company saved.");
+      setEditing(false);
+      load();
+    } finally {
+      setEditBusy(false);
+    }
   }
 
   async function addTag(event: FormEvent) {
@@ -137,66 +181,110 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
       body: JSON.stringify({ name: newTag }),
     });
     if (!response.ok) {
-      setNotice(await readError(response, "Could not add tag"));
+      const message = await readError(response, "Could not add tag");
+      setNotice(message);
+      toast.error(message);
       return;
     }
     setNewTag("");
+    toast.success(`Tag "${newTag.trim()}" added.`);
     load();
   }
 
-  async function removeTag(tagId: string, name: string) {
-    if (!window.confirm(`Remove tag "${name}" from this company?`)) return;
+  async function removeTag(tagId: string) {
     const response = await fetch(`/api/companies/${params.id}/tags`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tagId }),
     });
     if (!response.ok) {
-      setNotice(await readError(response, "Could not remove tag"));
+      const message = await readError(response, "Could not remove tag");
+      setNotice(message);
+      setDeleteError(message);
+      toast.error(message);
       return;
     }
+    toast.success("Tag removed.");
     load();
   }
 
   async function addContact(event: FormEvent) {
     event.preventDefault();
     setNotice(null);
-    const response = await fetch(`/api/companies/${params.id}/contacts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(contactForm),
+    setContactFieldErrors({});
+    const parsed = contactSchema.safeParse({
+      ...contactForm,
+      companyId: params.id,
+      linkedinUrl: contactForm.linkedinUrl || null,
     });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      setNotice(
-        response.status === 409
-          ? "A contact with this email already exists at this company."
-          : (payload?.error ?? "Could not add contact"),
-      );
+    if (!parsed.success) {
+      setContactFieldErrors(zodFieldErrors(parsed));
       return;
     }
-    setContactForm({
-      fullName: "",
-      jobTitle: "",
-      email: "",
-      linkedinUrl: "",
-      phone: "",
-      isDecisionMaker: false,
-      notes: "",
-    });
-    load();
+    setContactBusy(true);
+    try {
+      const response = await fetch(`/api/companies/${params.id}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contactForm),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        if (payload && payload.errors && typeof payload.errors === "object") {
+          const mapped: Record<string, string> = {};
+          for (const [k, v] of Object.entries(payload.errors)) {
+            if (typeof v === "string") mapped[k] = v;
+          }
+          if (Object.keys(mapped).length > 0) {
+            setContactFieldErrors(mapped);
+            setNotice("Fix the highlighted fields and try again.");
+            return;
+          }
+        }
+        const message =
+          response.status === 409
+            ? "A contact with this email already exists at this company."
+            : (payload?.error ?? "Could not add contact");
+        setNotice(message);
+        toast.error(message);
+        return;
+      }
+      setContactForm({
+        fullName: "",
+        jobTitle: "",
+        email: "",
+        linkedinUrl: "",
+        phone: "",
+        isDecisionMaker: false,
+        notes: "",
+      });
+      toast.success("Contact added.");
+      load();
+    } finally {
+      setContactBusy(false);
+    }
   }
 
-  async function deleteContact(contactId: string, name: string) {
-    if (!window.confirm(`Delete contact "${name}"?`)) return;
+  async function deleteContact(contactId: string) {
     const response = await fetch(`/api/companies/${params.id}/contacts/${contactId}`, {
       method: "DELETE",
     });
     if (!response.ok) {
-      setNotice(await readError(response, "Could not delete contact"));
+      const message = await readError(response, "Could not delete contact");
+      setNotice(message);
+      setDeleteError(message);
+      toast.error(message);
       return;
     }
+    toast.success("Contact deleted.");
     load();
+  }
+
+  async function runConfirm() {
+    if (!confirm) return;
+    if (confirm.kind === "tag") await removeTag(confirm.id);
+    else await deleteContact(confirm.id);
+    setConfirm(null);
   }
 
   if (loading) {
@@ -239,227 +327,299 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
           <Link href={`/deals?companyId=${company.id}`} className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">
             Add deal
           </Link>
-          <Button type="button" onClick={() => setEditing((v) => !v)} variant="default">
-            {editing ? "Cancel edit" : "Edit"}
+          <Button type="button" onClick={() => setEditing(true)} variant="default">
+            Edit
           </Button>
         </div>
       </div>
       {notice && <p className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-base text-slate-700">{notice}</p>}
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900">Details</h2>
-        {editing ? (
-          <form onSubmit={saveEdit} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Label className="text-base font-medium text-slate-700">
-              Status
-              <Input value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })} className="mt-1" />
-            </Label>
-            <Label className="text-base font-medium text-slate-700">
-              Priority
-              <Input value={edit.priority} onChange={(e) => setEdit({ ...edit, priority: e.target.value })} className="mt-1" />
-            </Label>
-            <Label className="text-base font-medium text-slate-700">
-              City
-              <Input value={edit.city} onChange={(e) => setEdit({ ...edit, city: e.target.value })} className="mt-1" />
-            </Label>
-            <Label className="text-base font-medium text-slate-700">
-              Country
-              <Input value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })} className="mt-1" />
-            </Label>
-            <Label className="text-base font-medium text-slate-700">
-              Industry
-              <Input value={edit.industry} onChange={(e) => setEdit({ ...edit, industry: e.target.value })} className="mt-1" />
-            </Label>
-            <Label className="text-base font-medium text-slate-700">
-              Description
-              <Textarea value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} rows={2} className="mt-1" />
-            </Label>
-            <Button type="submit" className={`sm:col-span-2 justify-self-start`}>
-              Save changes
-            </Button>
-          </form>
-        ) : (
-          <dl className="mt-3 grid grid-cols-1 gap-2 text-base sm:grid-cols-2">
-            <div><dt className="text-slate-500">Website</dt><dd className="text-slate-900">{company.website ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">Industry</dt><dd className="text-slate-900">{company.industry ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">Location</dt><dd className="text-slate-900">{[company.city, company.country].filter(Boolean).join(", ") || "—"}</dd></div>
-            <div><dt className="text-slate-500">Size</dt><dd className="text-slate-900">{company.size ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">LinkedIn</dt><dd className="text-slate-900">{company.linkedinUrl ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">Source</dt><dd className="text-slate-900">{company.source ?? "—"}</dd></div>
-            <div><dt className="text-slate-500">Status / Priority</dt><dd className="text-slate-900">{company.status} / {company.priority}</dd></div>
-            <div><dt className="text-slate-500">Assigned to</dt><dd className="text-slate-900">{company.assignedTo?.name ?? "Unassigned"}</dd></div>
-            <div className="sm:col-span-2"><dt className="text-slate-500">Description</dt><dd className="text-slate-900">{company.description ?? "—"}</dd></div>
-            <div className="sm:col-span-2"><dt className="text-slate-500">Requirements</dt><dd className="text-slate-900">{company.requirements ?? "—"}</dd></div>
-            <div className="sm:col-span-2"><dt className="text-slate-500">Research notes</dt><dd className="text-slate-900">{company.researchNotes ?? "—"}</dd></div>
-          </dl>
-        )}
-        <div className="mt-4">
-          <h3 className="text-base font-medium text-slate-700">Tags</h3>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {company.tags.length === 0 && <span className="text-base text-slate-500">No tags yet.</span>}
-            {company.tags.map((t) => (
-              <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-sm font-medium text-slate-700">
-                {t.name}
-                <Button type="button" variant="ghost" aria-label={`Remove tag ${t.name}`} onClick={() => removeTag(t.id, t.name)} className="text-slate-500 hover:text-red-600">
-                  ×
-                </Button>
-              </span>
-            ))}
-          </div>
-          <form onSubmit={addTag} className="mt-2 flex gap-2">
-            <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="New tag (created if missing)" className={`max-w-xs`} />
-            <Button type="submit" variant="outline">Add tag</Button>
-          </form>
-        </div>
-      </section>
-
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900">Contacts</h2>
-        {company.contacts.length === 0 ? (
-          <p className="mt-2 text-base text-slate-500">No contacts yet.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {company.contacts.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-base">
-                <span>
-                  <span className="font-medium text-slate-900">{c.fullName}</span>
-                  {c.isDecisionMaker && <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-sm font-medium text-brand-700">Decision maker</span>}
-                  <span className="block text-slate-600">
-                    {c.jobTitle ?? ""} · {c.email}
-                    {c.phone ? ` · ${c.phone}` : ""}
-                  </span>
-                  {c.notes && <span className="block text-sm text-slate-500">{c.notes}</span>}
-                </span>
-                <Button type="button" onClick={() => deleteContact(c.id, c.fullName)} className="text-base font-medium text-red-600 hover:underline">
-                  Delete
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form onSubmit={addContact} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <ResponsiveDialog
+        open={editing}
+        onOpenChange={setEditing}
+        title="Edit company"
+        description="Update the company details below."
+      >
+        <form onSubmit={saveEdit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Label className="text-base font-medium text-slate-700">
-            Full name *
-            <Input required value={contactForm.fullName} onChange={(e) => setContactForm({ ...contactForm, fullName: e.target.value })} className="mt-1" />
+            Status
+            <Input value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })} className="mt-1" />
+            <FieldError message={editFieldErrors.status} />
           </Label>
           <Label className="text-base font-medium text-slate-700">
-            Email *
-            <Input required type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} className="mt-1" />
+            Priority
+            <Input value={edit.priority} onChange={(e) => setEdit({ ...edit, priority: e.target.value })} className="mt-1" />
+            <FieldError message={editFieldErrors.priority} />
           </Label>
           <Label className="text-base font-medium text-slate-700">
-            Job title
-            <Input value={contactForm.jobTitle} onChange={(e) => setContactForm({ ...contactForm, jobTitle: e.target.value })} className="mt-1" />
+            City
+            <Input value={edit.city} onChange={(e) => setEdit({ ...edit, city: e.target.value })} className="mt-1" />
+            <FieldError message={editFieldErrors.city} />
           </Label>
           <Label className="text-base font-medium text-slate-700">
-            Phone
-            <Input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} className="mt-1" />
+            Country
+            <Input value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })} className="mt-1" />
+            <FieldError message={editFieldErrors.country} />
           </Label>
           <Label className="text-base font-medium text-slate-700">
-            LinkedIn URL
-            <Input value={contactForm.linkedinUrl} onChange={(e) => setContactForm({ ...contactForm, linkedinUrl: e.target.value })} className="mt-1" />
+            Industry
+            <Input value={edit.industry} onChange={(e) => setEdit({ ...edit, industry: e.target.value })} className="mt-1" />
+            <FieldError message={editFieldErrors.industry} />
           </Label>
-          <Label className="flex items-center gap-2 text-base text-slate-700">
-            <input type="checkbox" checked={contactForm.isDecisionMaker} onChange={(e) => setContactForm({ ...contactForm, isDecisionMaker: e.target.checked })} />
-            Decision maker
+          <Label className="text-base font-medium text-slate-700">
+            Description
+            <Textarea value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} rows={2} className="mt-1" />
+            <FieldError message={editFieldErrors.description} />
           </Label>
-          <Label className="text-base font-medium text-slate-700 sm:col-span-2">
-            Notes
-            <Textarea value={contactForm.notes} onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })} rows={2} className="mt-1" />
-          </Label>
-          <Button type="submit" className={`justify-self-start`}>Add contact</Button>
+          <Button type="submit" disabled={editBusy} className="sm:col-span-2 justify-self-start">
+            {editBusy ? "Saving…" : "Save changes"}
+          </Button>
         </form>
-      </section>
+      </ResponsiveDialog>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-900">Email timeline</h2>
-          {company.emailActivities.length === 0 ? (
-            <p className="mt-2 text-base text-slate-500">No emails tracked for this company yet.</p>
-          ) : (
-            <ul className="mt-3 space-y-2 text-base">
-              {company.emailActivities.map((e) => (
-                <li key={e.id} className="text-slate-600">
-                  <span className="font-medium text-slate-900">{e.subject}</span>
-                  <span className="block text-sm text-slate-500">
-                    {fmt(e.createdAt)} · {e.status.replaceAll("_", " ")} → {e.recipientEmail}
-                    {e.contact ? ` · ${e.contact.fullName}` : ""}
+      <Tabs defaultValue="overview" className="mt-4">
+        <TabsList className="flex flex-wrap justify-start">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="emails">Emails</TabsTrigger>
+          <TabsTrigger value="follow-ups">Follow-ups</TabsTrigger>
+          <TabsTrigger value="meetings">Meetings</TabsTrigger>
+          <TabsTrigger value="deals">Deals</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-4">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Details</h2>
+            <dl className="mt-3 grid grid-cols-1 gap-2 text-base sm:grid-cols-2">
+              <div><dt className="text-slate-500">Website</dt><dd className="text-slate-900">{company.website ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">Industry</dt><dd className="text-slate-900">{company.industry ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">Location</dt><dd className="text-slate-900">{[company.city, company.country].filter(Boolean).join(", ") || "—"}</dd></div>
+              <div><dt className="text-slate-500">Size</dt><dd className="text-slate-900">{company.size ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">LinkedIn</dt><dd className="text-slate-900">{company.linkedinUrl ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">Source</dt><dd className="text-slate-900">{company.source ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">Status / Priority</dt><dd className="text-slate-900">{company.status} / {company.priority}</dd></div>
+              <div><dt className="text-slate-500">Assigned to</dt><dd className="text-slate-900">{company.assignedTo?.name ?? "Unassigned"}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-slate-500">Description</dt><dd className="text-slate-900">{company.description ?? "—"}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-slate-500">Requirements</dt><dd className="text-slate-900">{company.requirements ?? "—"}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-slate-500">Research notes</dt><dd className="text-slate-900">{company.researchNotes ?? "—"}</dd></div>
+            </dl>
+            <div className="mt-4">
+              <h3 className="text-base font-medium text-slate-700">Tags</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {company.tags.length === 0 && <span className="text-base text-slate-500">No tags yet.</span>}
+                {company.tags.map((t) => (
+                  <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-sm font-medium text-slate-700">
+                    {t.name}
+                    <Button type="button" variant="ghost" aria-label={`Remove tag ${t.name}`} onClick={() => setConfirm({ kind: "tag", id: t.id, name: t.name })} className="text-slate-500 hover:text-red-600">
+                      ×
+                    </Button>
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-900">Follow-ups</h2>
-          {company.followUps.length === 0 ? (
-            <p className="mt-2 text-base text-slate-500">No follow-ups.</p>
-          ) : (
-            <ul className="mt-3 space-y-2 text-base">
-              {company.followUps.map((f) => (
-                <li key={f.id} className="text-slate-600">
-                  {fmt(f.dueDate)} · {f.status}
-                  {f.reason ? ` · ${f.reason}` : ""}
-                </li>
-              ))}
-            </ul>
-          )}
-          <h2 className="mt-5 text-base font-semibold text-slate-900">Meetings</h2>
-          {company.meetings.length === 0 ? (
-            <p className="mt-2 text-base text-slate-500">No meetings.</p>
-          ) : (
-            <ul className="mt-3 space-y-2 text-base">
-              {company.meetings.map((m) => (
-                <li key={m.id} className="text-slate-600">
-                  {m.title} · {fmt(m.dateTime)} · {m.status.replaceAll("_", " ")}
-                </li>
-              ))}
-            </ul>
-          )}
-          <h2 className="mt-5 text-base font-semibold text-slate-900">Deals</h2>
-          {company.deals.length === 0 ? (
-            <p className="mt-2 text-base text-slate-500">No deals.</p>
-          ) : (
-            <ul className="mt-3 space-y-2 text-base">
-              {company.deals.map((d) => (
-                <li key={d.id} className="text-slate-600">
-                  <Link href="/deals" className="font-medium text-brand-600 hover:underline">{d.title}</Link>
-                  {" · "}{d.status.replaceAll("_", " ")}
-                  {d.estimatedBudget != null ? ` · $${d.estimatedBudget}` : ""}
-                </li>
-              ))}
-            </ul>
-          )}
-          {company.projects.length > 0 && (
-            <>
-              <h2 className="mt-5 text-base font-semibold text-slate-900">Projects</h2>
-              <ul className="mt-3 space-y-2 text-base">
-                {company.projects.map((p) => (
-                  <li key={p.id} className="text-slate-600">
-                    {p.name} · {p.status.replaceAll("_", " ")}
+                ))}
+              </div>
+              <form onSubmit={addTag} className="mt-2 flex gap-2">
+                <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="New tag (created if missing)" className="max-w-xs" />
+                <Button type="submit" variant="outline">Add tag</Button>
+              </form>
+            </div>
+          </section>
+
+          <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Contacts</h2>
+            {company.contacts.length === 0 ? (
+              <p className="mt-2 text-base text-slate-500">No contacts yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {company.contacts.map((c) => (
+                  <li key={c.id} className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-base">
+                    <span>
+                      <span className="font-medium text-slate-900">{c.fullName}</span>
+                      {c.isDecisionMaker && <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-sm font-medium text-brand-700">Decision maker</span>}
+                      <span className="block text-slate-600">
+                        {c.jobTitle ?? ""} · {c.email}
+                        {c.phone ? ` · ${c.phone}` : ""}
+                      </span>
+                      {c.notes && <span className="block text-sm text-slate-500">{c.notes}</span>}
+                    </span>
+                    <Button type="button" onClick={() => setConfirm({ kind: "contact", id: c.id, name: c.fullName })} className="text-base font-medium text-red-600 hover:underline">
+                      Delete
+                    </Button>
                   </li>
                 ))}
               </ul>
-            </>
-          )}
-        </section>
-      </div>
+            )}
+            <form onSubmit={addContact} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Label className="text-base font-medium text-slate-700">
+                Full name *
+                <Input required value={contactForm.fullName} onChange={(e) => setContactForm({ ...contactForm, fullName: e.target.value })} className="mt-1" />
+                <FieldError message={contactFieldErrors.fullName} />
+              </Label>
+              <Label className="text-base font-medium text-slate-700">
+                Email *
+                <Input required type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} className="mt-1" />
+                <FieldError message={contactFieldErrors.email} />
+              </Label>
+              <Label className="text-base font-medium text-slate-700">
+                Job title
+                <Input value={contactForm.jobTitle} onChange={(e) => setContactForm({ ...contactForm, jobTitle: e.target.value })} className="mt-1" />
+                <FieldError message={contactFieldErrors.jobTitle} />
+              </Label>
+              <Label className="text-base font-medium text-slate-700">
+                Phone
+                <Input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} className="mt-1" />
+                <FieldError message={contactFieldErrors.phone} />
+              </Label>
+              <Label className="text-base font-medium text-slate-700">
+                LinkedIn URL
+                <Input value={contactForm.linkedinUrl} onChange={(e) => setContactForm({ ...contactForm, linkedinUrl: e.target.value })} className="mt-1" />
+                <FieldError message={contactFieldErrors.linkedinUrl} />
+              </Label>
+              <div className="flex items-center gap-2 text-base text-slate-700">
+                <Checkbox
+                  id="decision-maker"
+                  checked={contactForm.isDecisionMaker}
+                  onCheckedChange={(v) => setContactForm({ ...contactForm, isDecisionMaker: v === true })}
+                />
+                <Label htmlFor="decision-maker" className="text-base text-slate-700">
+                  Decision maker
+                </Label>
+              </div>
+              <Label className="text-base font-medium text-slate-700 sm:col-span-2">
+                Notes
+                <Textarea value={contactForm.notes} onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })} rows={2} className="mt-1" />
+                <FieldError message={contactFieldErrors.notes} />
+              </Label>
+              <Button type="submit" disabled={contactBusy} className="justify-self-start">
+                {contactBusy ? "Saving…" : "Add contact"}
+              </Button>
+            </form>
+          </section>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900">Activity for this company</h2>
-        {company.activityLog.length === 0 ? (
-          <p className="mt-2 text-base text-slate-500">No activity recorded yet.</p>
-        ) : (
-          <ul className="mt-3 space-y-2 text-base">
-            {company.activityLog.map((a) => (
-              <li key={a.id} className="text-slate-600">
-                <span className="font-medium text-slate-900">{a.actor?.name ?? "System"}</span>
-                {" "}{a.action.replaceAll("_", " ").toLowerCase()} {a.entityType}
-                <span className="text-slate-400"> · {fmt(a.createdAt)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Activity for this company</h2>
+            {company.activityLog.length === 0 ? (
+              <p className="mt-2 text-base text-slate-500">No activity recorded yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-2 text-base">
+                {company.activityLog.map((a) => (
+                  <li key={a.id} className="text-slate-600">
+                    <span className="font-medium text-slate-900">{a.actor?.name ?? "System"}</span>
+                    {" "}{a.action.replaceAll("_", " ").toLowerCase()} {a.entityType}
+                    <span className="text-slate-400"> · {fmt(a.createdAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="emails" className="mt-4">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Email timeline</h2>
+            {company.emailActivities.length === 0 ? (
+              <p className="mt-2 text-base text-slate-500">No emails tracked for this company yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-2 text-base">
+                {company.emailActivities.map((e) => (
+                  <li key={e.id} className="text-slate-600">
+                    <span className="font-medium text-slate-900">{e.subject}</span>
+                    <span className="block text-sm text-slate-500">
+                      {fmt(e.createdAt)} · {e.status.replaceAll("_", " ")} → {e.recipientEmail}
+                      {e.contact ? ` · ${e.contact.fullName}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="follow-ups" className="mt-4">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Follow-ups</h2>
+            {company.followUps.length === 0 ? (
+              <p className="mt-2 text-base text-slate-500">No follow-ups.</p>
+            ) : (
+              <ul className="mt-3 space-y-2 text-base">
+                {company.followUps.map((f) => (
+                  <li key={f.id} className="text-slate-600">
+                    {fmt(f.dueDate)} · {f.status}
+                    {f.reason ? ` · ${f.reason}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="meetings" className="mt-4">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Meetings</h2>
+            {company.meetings.length === 0 ? (
+              <p className="mt-2 text-base text-slate-500">No meetings.</p>
+            ) : (
+              <ul className="mt-3 space-y-2 text-base">
+                {company.meetings.map((m) => (
+                  <li key={m.id} className="text-slate-600">
+                    {m.title} · {fmt(m.dateTime)} · {m.status.replaceAll("_", " ")}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="deals" className="mt-4">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Deals</h2>
+            {company.deals.length === 0 ? (
+              <p className="mt-2 text-base text-slate-500">No deals.</p>
+            ) : (
+              <ul className="mt-3 space-y-2 text-base">
+                {company.deals.map((d) => (
+                  <li key={d.id} className="text-slate-600">
+                    <Link href="/deals" className="font-medium text-brand-600 hover:underline">{d.title}</Link>
+                    {" · "}{d.status.replaceAll("_", " ")}
+                    {d.estimatedBudget != null ? ` · $${d.estimatedBudget}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {company.projects.length > 0 && (
+              <>
+                <h2 className="mt-5 text-base font-semibold text-slate-900">Projects</h2>
+                <ul className="mt-3 space-y-2 text-base">
+                  {company.projects.map((p) => (
+                    <li key={p.id} className="text-slate-600">
+                      {p.name} · {p.status.replaceAll("_", " ")}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        </TabsContent>
+      </Tabs>
+
+      <ConfirmDialog
+        open={!!confirm}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        title={confirm?.kind === "tag" ? "Remove tag" : "Delete contact"}
+        description={
+          confirm?.kind === "tag"
+            ? `Remove tag "${confirm.name}" from this company?`
+            : confirm
+              ? `Delete contact "${confirm.name}"?`
+              : ""
+        }
+        confirmLabel="Delete"
+        onConfirm={runConfirm}
+      />
+      <ErrorDialog
+        open={!!deleteError}
+        onOpenChange={(o) => !o && setDeleteError(null)}
+        title="Could not complete that delete"
+        message={deleteError ?? ""}
+        hint="Check your connection and try again. If the problem persists, the item may already have been removed — reload the page to see the latest state."
+      />
     </div>
   );
 }

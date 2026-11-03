@@ -2,13 +2,26 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ErrorDialog } from "@/components/ui/responsive-dialog";
+import { FieldError, logicalDateErrors, zodFieldErrors } from "@/components/ui/field-error";
+import { emailActivitySchema } from "@/lib/validation";
+import {
   api,
-            Field,
+  Field,
   ErrorAlert,
   StatusBadge,
   EMAIL_STATUSES,
@@ -60,7 +73,10 @@ export default function EmailDetailPage() {
   const [sequenceNumber, setSequenceNumber] = useState(1);
   const [followUpDate, setFollowUpDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Status update state
   const [newStatus, setNewStatus] = useState("");
@@ -68,6 +84,9 @@ export default function EmailDetailPage() {
   const [replySummary, setReplySummary] = useState("");
   const [statusFollowUp, setStatusFollowUp] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
+  const [statusFieldErrors, setStatusFieldErrors] = useState<Record<string, string>>({});
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const load = () => {
     api<Detail>(`/api/emails/${params.id}`)
@@ -84,11 +103,130 @@ export default function EmailDetailPage() {
         setError(null);
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to load email record");
+        const message = err instanceof Error ? err.message : "Failed to load email record";
+        setError(message);
+        toast.error(message);
       });
   };
 
   useEffect(load, [params.id]);
+
+  async function doStatusUpdate() {
+    if (!pendingStatus) return;
+    setError(null);
+    setNotice(null);
+    setStatusSaving(true);
+    try {
+      await api(`/api/emails/${params.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: pendingStatus,
+          notes: notes || null,
+          replySummary: replySummary || null,
+          followUpDate: statusFollowUp || null,
+        }),
+      });
+      setNotes("");
+      setReplySummary("");
+      setStatusFollowUp("");
+      setNotice(`Status updated to ${statusLabel(pendingStatus)}.`);
+      toast.success(`Status updated to ${statusLabel(pendingStatus)}.`);
+      setPendingStatus(null);
+      load();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update status";
+      setError(message);
+      setStatusError(message);
+      toast.error(message);
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  function handleStatusSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setNotice(null);
+    const errors: Record<string, string> = {};
+    if (!EMAIL_STATUSES.includes(newStatus)) {
+      errors.newStatus = "Choose a valid status.";
+    }
+    Object.assign(errors, logicalDateErrors({ followUpDate: statusFollowUp || undefined }));
+    setStatusFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    // Important action: confirm first, then send.
+    setPendingStatus(newStatus);
+  }
+
+  async function handleEditSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!detail) return;
+    setError(null);
+    setNotice(null);
+    setEditFieldErrors({});
+    const parsed = emailActivitySchema.safeParse({
+      companyId: detail.companyId,
+      contactId: detail.contactId,
+      campaignId: detail.campaignId,
+      templateId: detail.templateId,
+      recipientEmail,
+      senderEmail: senderEmail || null,
+      subject,
+      body,
+      sequenceNumber,
+      status: detail.status,
+      sentAt: sentAt || null,
+      followUpDate: followUpDate || null,
+      assignedToId: detail.assignedToId,
+    });
+    const logical = logicalDateErrors({ followUpDate: followUpDate || undefined });
+    const errors = { ...zodFieldErrors(parsed), ...logical };
+    if (Object.keys(errors).length > 0) {
+      setEditFieldErrors(errors);
+      return;
+    }
+    setSaving(true);
+    try {
+      await api(`/api/emails/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          body,
+          recipientEmail,
+          senderEmail: senderEmail || null,
+          sentAt: fromLocalInput(sentAt),
+          sequenceNumber,
+          followUpDate: followUpDate || null,
+        }),
+      });
+      setNotice("Record saved.");
+      toast.success("Record saved.");
+      load();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to save record";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function doDelete() {
+    setDeleting(true);
+    try {
+      await api(`/api/emails/${params.id}`, { method: "DELETE" });
+      toast.success("Email record deleted.");
+      router.push("/emails");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete record";
+      setError(message);
+      setDeleteError(message);
+      toast.error(message);
+      setDeleting(false);
+    }
+  }
 
   if (error && !detail) {
     return (
@@ -126,53 +264,35 @@ export default function EmailDetailPage() {
           Marking it Unsubscribed automatically adds the recipient to the
           Suppression list. Marking it Bounced flags it in the list.
         </p>
-        <form
-          className="mt-3 space-y-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError(null);
-            setNotice(null);
-            setStatusSaving(true);
-            try {
-              await api(`/api/emails/${params.id}/status`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  status: newStatus,
-                  notes: notes || null,
-                  replySummary: replySummary || null,
-                  followUpDate: statusFollowUp || null,
-                }),
-              });
-              setNotes("");
-              setReplySummary("");
-              setStatusFollowUp("");
-              setNotice(`Status updated to ${statusLabel(newStatus)}.`);
-              load();
-            } catch (err: unknown) {
-              setError(err instanceof Error ? err.message : "Failed to update status");
-            } finally {
-              setStatusSaving(false);
-            }
-          }}
-        >
+        <form className="mt-3 space-y-4" onSubmit={handleStatusSubmit}>
           <ErrorAlert message={error} />
-          <Field label="New status *">
-            <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
-              {EMAIL_STATUSES.map((s) => (
-                <option key={s} value={s}>{statusLabel(s)}</option>
-              ))}
-            </select>
-          </Field>
+          <div>
+            <Field label="New status *">
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger className="min-h-12 text-base">
+                  <SelectValue placeholder="Choose a status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EMAIL_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <FieldError message={statusFieldErrors.newStatus} />
+          </div>
           <Field label="Notes" hint="Context for the change, stored in the activity log.">
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </Field>
           <Field label="Reply summary" hint="What the prospect actually said, in your own words.">
             <Textarea value={replySummary} onChange={(e) => setReplySummary(e.target.value)} rows={2} />
           </Field>
-          <Field label="Follow-up date (optional — keeps the reminder in sync)">
-            <Input type="date" value={statusFollowUp} onChange={(e) => setStatusFollowUp(e.target.value)} />
-          </Field>
+          <div>
+            <Field label="Follow-up date (optional — keeps the reminder in sync)">
+              <DatePicker value={statusFollowUp} onChange={setStatusFollowUp} placeholder="Pick a date" />
+            </Field>
+            <FieldError message={statusFieldErrors.followUpDate} />
+          </div>
           <Button type="submit" disabled={statusSaving} variant="default">
             {statusSaving ? "Updating…" : "Update status"}
           </Button>
@@ -186,60 +306,49 @@ export default function EmailDetailPage() {
           here — they are set when the record is created. Editing the
           follow-up date keeps the linked reminder in sync.
         </p>
-        <form
-          className="mt-3 space-y-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError(null);
-            setNotice(null);
-            setSaving(true);
-            try {
-              await api(`/api/emails/${params.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  subject,
-                  body,
-                  recipientEmail,
-                  senderEmail: senderEmail || null,
-                  sentAt: fromLocalInput(sentAt),
-                  sequenceNumber,
-                  followUpDate: followUpDate || null,
-                }),
-              });
-              setNotice("Record saved.");
-              load();
-            } catch (err: unknown) {
-              setError(err instanceof Error ? err.message : "Failed to save record");
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
+        <form className="mt-3 space-y-4" onSubmit={handleEditSubmit}>
           <ErrorAlert message={error} />
-          <Field label="Subject *">
-            <Input required value={subject} onChange={(e) => setSubject(e.target.value)} />
-          </Field>
-          <Field label="Body *">
-            <Textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
-          </Field>
-          <Field label="Recipient email *">
-            <Input required type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} />
-          </Field>
-          <Field label="Sender email account">
-            <Input type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} />
-          </Field>
+          <div>
+            <Field label="Subject *">
+              <Input required value={subject} onChange={(e) => setSubject(e.target.value)} />
+            </Field>
+            <FieldError message={editFieldErrors.subject} />
+          </div>
+          <div>
+            <Field label="Body *">
+              <Textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
+            </Field>
+            <FieldError message={editFieldErrors.body} />
+          </div>
+          <div>
+            <Field label="Recipient email *">
+              <Input required type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} />
+            </Field>
+            <FieldError message={editFieldErrors.recipientEmail} />
+          </div>
+          <div>
+            <Field label="Sender email account">
+              <Input type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} />
+            </Field>
+            <FieldError message={editFieldErrors.senderEmail} />
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Date / time sent">
               <Input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
             </Field>
-            <Field label="Sequence number">
-              <Input type="number" min={1} value={sequenceNumber} onChange={(e) => setSequenceNumber(Number(e.target.value) || 1)} />
-            </Field>
+            <div>
+              <Field label="Sequence number">
+                <Input type="number" min={1} value={sequenceNumber} onChange={(e) => setSequenceNumber(Number(e.target.value) || 1)} />
+              </Field>
+              <FieldError message={editFieldErrors.sequenceNumber} />
+            </div>
           </div>
-          <Field label="Follow-up date">
-            <Input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
-          </Field>
+          <div>
+            <Field label="Follow-up date">
+              <DatePicker value={followUpDate} onChange={setFollowUpDate} placeholder="Pick a date" />
+            </Field>
+            <FieldError message={editFieldErrors.followUpDate} />
+          </div>
           <p className="text-sm text-slate-500">
             Currently assigned to: {detail.assignedTo?.name ?? "Unassigned"} ·
             Sent: {fmtDateTime(detail.sentAt)} · Follow-up: {fmtDate(detail.followUpDate)}
@@ -253,17 +362,7 @@ export default function EmailDetailPage() {
                 type="button"
                 disabled={deleting}
                 variant="destructive"
-                onClick={async () => {
-                  if (!window.confirm("Delete this email record? Its pending follow-up reminders are removed too. This cannot be undone.")) return;
-                  setDeleting(true);
-                  try {
-                    await api(`/api/emails/${params.id}`, { method: "DELETE" });
-                    router.push("/emails");
-                  } catch (err: unknown) {
-                    setError(err instanceof Error ? err.message : "Failed to delete record");
-                    setDeleting(false);
-                  }
-                }}
+                onClick={() => setConfirmDelete(true)}
               >
                 {deleting ? "Deleting…" : "Delete record"}
               </Button>
@@ -294,6 +393,41 @@ export default function EmailDetailPage() {
           </ul>
         )}
       </section>
+
+      <ConfirmDialog
+        open={pendingStatus !== null}
+        onOpenChange={(o) => !o && setPendingStatus(null)}
+        title="Update status"
+        description={
+          pendingStatus
+            ? `Change this email's status to ${statusLabel(pendingStatus)}?${pendingStatus === "UNSUBSCRIBED" ? " The recipient will be added to the Suppression list." : ""}`
+            : ""
+        }
+        confirmLabel="Update status"
+        onConfirm={doStatusUpdate}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete email record"
+        description="Delete this email record? Its pending follow-up reminders are removed too. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={doDelete}
+      />
+      <ErrorDialog
+        open={!!deleteError}
+        onOpenChange={(o) => !o && setDeleteError(null)}
+        title="Could not delete email record"
+        message={deleteError ?? ""}
+        hint="Check your connection and try again. If the record is already gone, return to the list to see the latest state."
+      />
+      <ErrorDialog
+        open={!!statusError}
+        onOpenChange={(o) => !o && setStatusError(null)}
+        title="Could not update status"
+        message={statusError ?? ""}
+        hint="Check your connection and try again. If the problem persists, reload the record to see its latest status before retrying."
+      />
     </div>
   );
 }

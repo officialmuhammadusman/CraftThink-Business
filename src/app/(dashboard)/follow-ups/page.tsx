@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ErrorDialog } from "@/components/ui/responsive-dialog";
+import { FieldError, logicalDateErrors, zodFieldErrors } from "@/components/ui/field-error";
+import { followUpSchema } from "@/lib/validation";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 
@@ -26,12 +33,22 @@ type Company = { id: string; name: string };
 type Contact = { id: string; fullName: string };
 type Assignee = { id: string; name: string; role: string };
 
-const selectCls =
-  "flex min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600";
-
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
-  return payload?.error ?? fallback;
+  return payload?.error ?? payload?.message ?? fallback;
+}
+
+/** Server-named field errors (fieldErrors / errors object) mapped onto fields. */
+function serverFieldErrors(payload: unknown): Record<string, string> | null {
+  if (!payload || typeof payload !== "object") return null;
+  const rec = (payload as Record<string, unknown>).fieldErrors ?? (payload as Record<string, unknown>).errors;
+  if (!rec || typeof rec !== "object" || Array.isArray(rec)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rec as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+    else if (Array.isArray(v) && typeof v[0] === "string") out[k] = v[0];
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 function FollowUpsInner() {
@@ -41,7 +58,10 @@ function FollowUpsInner() {
   const [items, setItems] = useState<FollowUp[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [creating, setCreating] = useState(false);
+  const [confirmItem, setConfirmItem] = useState<FollowUp | null>(null);
+  const [errorDialog, setErrorDialog] = useState<string | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
@@ -63,7 +83,9 @@ function FollowUpsInner() {
       const payload = await response.json();
       setItems(payload.data.items as FollowUp[]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load follow-ups");
+      const message = err instanceof Error ? err.message : "Failed to load follow-ups";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -97,31 +119,57 @@ function FollowUpsInner() {
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    setNotice(null);
-    if (!form.companyId || !form.dueDate) {
-      setNotice("Company and due date are required.");
-      return;
-    }
-    const response = await fetch("/api/follow-ups", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        companyId: form.companyId,
-        contactId: form.contactId || null,
-        dueDate: new Date(form.dueDate).toISOString(),
-        reason: form.reason || null,
-        notes: form.notes || null,
-        status: "PENDING",
-        assignedToId: form.assignedToId || null,
-      }),
+    const parsed = followUpSchema.safeParse({
+      companyId: form.companyId,
+      contactId: form.contactId || null,
+      dueDate: form.dueDate,
+      reason: form.reason || null,
+      notes: form.notes || null,
+      status: "PENDING",
+      assignedToId: form.assignedToId || null,
     });
-    if (!response.ok) {
-      setNotice(await readError(response, "Could not create follow-up"));
+    const errs = zodFieldErrors(parsed);
+    if (!form.dueDate) errs.dueDate = "Due date is required.";
+    const logical = logicalDateErrors({ followUpDate: form.dueDate });
+    if (logical.followUpDate) errs.dueDate = logical.followUpDate;
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
       return;
     }
-    setForm({ ...form, contactId: "", dueDate: "", reason: "", notes: "" });
-    setNotice("Follow-up created.");
-    load();
+    setFieldErrors({});
+    setCreating(true);
+    try {
+      const response = await fetch("/api/follow-ups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: form.companyId,
+          contactId: form.contactId || null,
+          dueDate: new Date(form.dueDate).toISOString(),
+          reason: form.reason || null,
+          notes: form.notes || null,
+          status: "PENDING",
+          assignedToId: form.assignedToId || null,
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const mapped = serverFieldErrors(payload);
+        const message = payload?.error ?? payload?.message ?? "Could not create follow-up";
+        if (mapped) {
+          setFieldErrors(mapped);
+          toast.error("Please fix the highlighted fields.");
+        } else {
+          toast.error(message);
+        }
+        return;
+      }
+      setForm({ ...form, contactId: "", dueDate: "", reason: "", notes: "" });
+      toast.success("Follow-up created.");
+      load();
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function markDone(item: FollowUp) {
@@ -131,19 +179,22 @@ function FollowUpsInner() {
       body: JSON.stringify({ status: "DONE" }),
     });
     if (!response.ok) {
-      setNotice(await readError(response, "Could not update follow-up"));
+      toast.error(await readError(response, "Could not update follow-up"));
       return;
     }
+    toast.success("Follow-up marked done.");
     load();
   }
 
   async function handleDelete(item: FollowUp) {
-    if (!window.confirm(`Delete this follow-up for ${item.company.name}?`)) return;
     const response = await fetch(`/api/follow-ups/${item.id}`, { method: "DELETE" });
     if (!response.ok) {
-      setNotice(await readError(response, "Could not delete follow-up"));
+      const message = await readError(response, "Could not delete follow-up");
+      toast.error(message);
+      setErrorDialog(message);
       return;
     }
+    toast.success("Follow-up deleted.");
     load();
   }
 
@@ -160,8 +211,6 @@ function FollowUpsInner() {
         title="Follow-ups"
         subtitle="One next action per prospect. Overdue is computed from the due date, so a pending item past its date never hides."
       />
-      {notice && <p className="mt-4 rounded-md bg-slate-100 px-3 py-3 text-base text-slate-700">{notice}</p>}
-
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>New follow-up</CardTitle>
@@ -171,45 +220,60 @@ function FollowUpsInner() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="fu-company">Company *</Label>
-                <select id="fu-company" required value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value, contactId: "" })} className={selectCls}>
-                  <option value="">Select company…</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <Select value={form.companyId || "__none"} onValueChange={(v) => setForm({ ...form, companyId: v === "__none" ? "" : v, contactId: "" })}>
+                  <SelectTrigger id="fu-company"><SelectValue placeholder="Select company…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Select company…</SelectItem>
+                    {companies.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldError message={fieldErrors.companyId} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fu-contact">Contact (optional)</Label>
-                <select id="fu-contact" value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })} className={selectCls}>
-                  <option value="">None</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>{c.fullName}</option>
-                  ))}
-                </select>
+                <Select value={form.contactId || "__none"} onValueChange={(v) => setForm({ ...form, contactId: v === "__none" ? "" : v })}>
+                  <SelectTrigger id="fu-contact"><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">None</SelectItem>
+                    {contacts.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.fullName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldError message={fieldErrors.contactId} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fu-due">Due date *</Label>
-                <Input id="fu-due" required type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+                <DatePicker className="min-h-12 text-base" value={form.dueDate} onChange={(v) => setForm({ ...form, dueDate: v })} placeholder="Pick a due date" />
+                <FieldError message={fieldErrors.dueDate} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fu-reason">Reason</Label>
                 <Input id="fu-reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. Second email due" />
+                <FieldError message={fieldErrors.reason} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fu-assignee">Assigned to</Label>
-                <select id="fu-assignee" value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })} className={selectCls}>
-                  <option value="">Me</option>
-                  {assignees.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
+                <Select value={form.assignedToId || "__none"} onValueChange={(v) => setForm({ ...form, assignedToId: v === "__none" ? "" : v })}>
+                  <SelectTrigger id="fu-assignee"><SelectValue placeholder="Me" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Me</SelectItem>
+                    {assignees.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldError message={fieldErrors.assignedToId} />
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="fu-notes">Notes</Label>
                 <Textarea id="fu-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
+                <FieldError message={fieldErrors.notes} />
               </div>
             </div>
-            <Button type="submit" className="w-full sm:w-auto">Create follow-up</Button>
+            <Button type="submit" disabled={creating} className="w-full sm:w-auto">{creating ? "Creating…" : "Create follow-up"}</Button>
           </form>
         </CardContent>
       </Card>
@@ -246,6 +310,11 @@ function FollowUpsInner() {
             image="/images/empty-followups.svg"
             title="No follow-ups in this view"
             description="Create one above so the next action never slips."
+            action={
+              <Button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+                Create a follow-up
+              </Button>
+            }
           />
         </div>
       ) : (
@@ -275,7 +344,7 @@ function FollowUpsInner() {
                         Mark done
                       </Button>
                     )}
-                    <Button type="button" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => handleDelete(item)}>
+                    <Button type="button" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => setConfirmItem(item)}>
                       Delete
                     </Button>
                   </div>
@@ -285,6 +354,24 @@ function FollowUpsInner() {
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={confirmItem !== null}
+        onOpenChange={(o) => !o && setConfirmItem(null)}
+        title="Delete follow-up?"
+        description={confirmItem ? `Delete this follow-up for ${confirmItem.company.name}?` : ""}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (confirmItem) await handleDelete(confirmItem);
+        }}
+      />
+      <ErrorDialog
+        open={errorDialog !== null}
+        onOpenChange={(o) => !o && setErrorDialog(null)}
+        title="Could not delete follow-up"
+        message={errorDialog ?? ""}
+        hint="The follow-up was not deleted. Check the message above and try again."
+      />
     </div>
   );
 }

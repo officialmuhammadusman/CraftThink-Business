@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api, ErrorAlert, TOKEN_HELP } from "../emails/ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResponsiveDialog } from "@/components/ui/responsive-dialog";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import Pager from "@/components/Pager";
@@ -30,6 +31,14 @@ export default function TemplatesPage() {
   const [applied, setApplied] = useState({ search: "", industry: "" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  function applySearch(e: FormEvent) {
+    e.preventDefault();
+    setPage(1);
+    setApplied({ search: search.trim(), industry: industry.trim() });
+    setFiltersOpen(false);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -74,15 +83,11 @@ export default function TemplatesPage() {
           {TOKEN_HELP}
         </CardContent>
       </Card>
-      <Card className="mt-4">
+      <Card className="mt-4 hidden md:block">
         <CardContent className="p-4 sm:p-6">
           <form
             className="flex flex-col gap-2 sm:flex-row"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setPage(1);
-              setApplied({ search: search.trim(), industry: industry.trim() });
-            }}
+            onSubmit={applySearch}
           >
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search templates…" aria-label="Search templates" className="flex-1" />
             <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Industry filter" aria-label="Industry filter" />
@@ -90,6 +95,23 @@ export default function TemplatesPage() {
           </form>
         </CardContent>
       </Card>
+      <div className="mt-4 md:hidden">
+        <Button type="button" variant="outline" className="w-full" onClick={() => setFiltersOpen(true)}>
+          Filters{(applied.search || applied.industry) ? " (active)" : ""}
+        </Button>
+      </div>
+      <ResponsiveDialog
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        title="Filters"
+        description="Search templates and filter by industry."
+      >
+        <form className="space-y-4" onSubmit={applySearch}>
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search templates…" aria-label="Search templates" />
+          <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Industry filter" aria-label="Industry filter" />
+          <Button type="submit" className="w-full">Search</Button>
+        </form>
+      </ResponsiveDialog>
       <div className="mt-4">
         <ErrorAlert message={error} />
         {loading ? (
