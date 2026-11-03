@@ -58,7 +58,7 @@ export default function ActivityLogPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ page: String(page), limit: "30" });
+      const params = new URLSearchParams({ page: String(page), limit: "10" });
       if (entityType) params.set("entityType", entityType);
       const response = await fetch(`/api/activity-log?${params}`);
       if (!response.ok) throw new Error(await readError(response, "Failed to load activity log"));

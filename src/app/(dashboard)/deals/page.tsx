@@ -21,6 +21,8 @@ import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { DEAL_STAGES, dealProbability, staleReason } from "@/lib/deal-stages";
 import { SUPPORTED_CURRENCIES, groupTotalsByCurrency, formatCurrencyTotals } from "@/lib/currency";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import SavedViewsControl from "@/components/SavedViewsControl";
 
 const STAGES = [...DEAL_STAGES];
@@ -89,6 +91,7 @@ function DealsInner() {
   const [filterCurrency, setFilterCurrency] = useState("");
   const [filterCompany, setFilterCompany] = useState("");
   const [items, setItems] = useState<Deal[]>([]);
+  const { page, totalPages, pageItems, setPage } = usePagination(items);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -148,6 +151,7 @@ function DealsInner() {
     setFilterStatus(filters.status ?? "");
     setFilterCurrency(filters.currency ?? "");
     setFilterCompany(filters.companyId ?? "");
+    setPage(1);
   }
 
   // Multi-currency totals: grouped BY currency, never mixed. Weighted
@@ -545,11 +549,11 @@ function DealsInner() {
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block space-y-2 text-base font-medium text-slate-700">
           Search
-          <input value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} placeholder="Search titles…" className={inputCls} />
+          <input value={filterSearch} onChange={(e) => { setFilterSearch(e.target.value); setPage(1); }} placeholder="Search titles…" className={inputCls} />
         </label>
         <label className="block space-y-2 text-base font-medium text-slate-700">
           Stage
-          <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}>
+          <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger><SelectValue placeholder="Any stage" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Any stage</SelectItem>
@@ -561,7 +565,7 @@ function DealsInner() {
         </label>
         <label className="block space-y-2 text-base font-medium text-slate-700">
           Currency
-          <Select value={filterCurrency || "all"} onValueChange={(v) => setFilterCurrency(v === "all" ? "" : v)}>
+          <Select value={filterCurrency || "all"} onValueChange={(v) => { setFilterCurrency(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger><SelectValue placeholder="Any currency" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Any currency</SelectItem>
@@ -573,7 +577,7 @@ function DealsInner() {
         </label>
         <label className="block space-y-2 text-base font-medium text-slate-700">
           Company
-          <Select value={filterCompany || "all"} onValueChange={(v) => setFilterCompany(v === "all" ? "" : v)}>
+          <Select value={filterCompany || "all"} onValueChange={(v) => { setFilterCompany(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger><SelectValue placeholder="Any company" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Any company</SelectItem>
@@ -605,7 +609,7 @@ function DealsInner() {
         <Button type="button" onClick={() => setView("board")} aria-pressed={view === "board"} variant={view === "board" ? "default" : "outline"}>
           Board
         </Button>
-        <Button type="button" onClick={() => setView("list")} aria-pressed={view === "list"} variant={view === "list" ? "default" : "outline"}>
+        <Button type="button" onClick={() => { setView("list"); setPage(1); }} aria-pressed={view === "list"} variant={view === "list" ? "default" : "outline"}>
           List
         </Button>
       </div>
@@ -681,9 +685,12 @@ function DealsInner() {
           })}
         </div>
       ) : (
+        <>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {items.map(dealCard)}
+          {pageItems.map(dealCard)}
         </div>
+        <Pager page={page} totalPages={totalPages} onPage={setPage} />
+        </>
       )}
 
       <ResponsiveDialog

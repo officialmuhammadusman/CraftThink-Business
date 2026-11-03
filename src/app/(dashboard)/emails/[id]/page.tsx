@@ -18,6 +18,8 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorDialog } from "@/components/ui/responsive-dialog";
 import { FieldError, logicalDateErrors, zodFieldErrors } from "@/components/ui/field-error";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { emailActivitySchema } from "@/lib/validation";
 import {
   api,
@@ -61,6 +63,7 @@ export default function EmailDetailPage() {
   const router = useRouter();
   const { role } = useMe();
   const [detail, setDetail] = useState<Detail | null>(null);
+  const followUpsPagination = usePagination(detail?.followUps ?? []);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -384,13 +387,16 @@ export default function EmailDetailPage() {
             to create one.
           </p>
         ) : (
+          <>
           <ul className="mt-2 space-y-2 text-base">
-            {detail.followUps.map((f) => (
+            {followUpsPagination.pageItems.map((f) => (
               <li key={f.id} className="text-slate-600">
                 Due {fmtDate(f.dueDate)} · {statusLabel(f.status)}
               </li>
             ))}
           </ul>
+          {detail.followUps.length > 0 && <Pager page={followUpsPagination.page} totalPages={followUpsPagination.totalPages} onPage={followUpsPagination.setPage} />}
+          </>
         )}
       </section>
 

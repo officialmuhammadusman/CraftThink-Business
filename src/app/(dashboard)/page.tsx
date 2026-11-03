@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -292,6 +294,8 @@ export default function DashboardPage() {
       return false;
     return true;
   });
+  const groupsPagination = usePagination(coverage?.groups ?? []);
+  const bizPagination = usePagination(filteredCompanies);
 
   if (error) {
     return (
@@ -549,7 +553,7 @@ export default function DashboardPage() {
               Coverage by country, city &amp; industry
             </h3>
             <div className="mt-2 grid gap-3 md:hidden">
-              {coverage.groups.map((g) => (
+              {groupsPagination.pageItems.map((g) => (
                 <Card key={`${g.country}|${g.city}|${g.industry}`}>
                   <CardContent className="p-4">
                     <p className="text-base font-medium text-slate-900">
@@ -577,7 +581,7 @@ export default function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {coverage.groups.map((g) => (
+                  {groupsPagination.pageItems.map((g) => (
                     <TableRow
                       key={`${g.country}|${g.city}|${g.industry}`}
                       className="border-b border-slate-100 last:border-0"
@@ -593,6 +597,9 @@ export default function DashboardPage() {
                 </TableBody>
               </Table>
             </div>
+            {coverage.groups.length > 0 && (
+              <Pager page={groupsPagination.page} totalPages={groupsPagination.totalPages} onPage={groupsPagination.setPage} />
+            )}
 
             <h3 className="mt-6 text-base font-semibold text-slate-900">
               Businesses
@@ -611,7 +618,7 @@ export default function DashboardPage() {
                   key={value}
                   type="button"
                   variant={statusFilter === value ? "default" : "outline"}
-                  onClick={() => setStatusFilter(value)}
+                  onClick={() => { setStatusFilter(value); bizPagination.setPage(1); }}
                   aria-pressed={statusFilter === value}
                   className="rounded-full"
                 >
@@ -622,7 +629,7 @@ export default function DashboardPage() {
                 <Label htmlFor="country-filter" className="text-base text-slate-500">
                   Country
                 </Label>
-                <Select value={countryFilter} onValueChange={setCountryFilter}>
+                <Select value={countryFilter} onValueChange={(v) => { setCountryFilter(v); bizPagination.setPage(1); }}>
                   <SelectTrigger id="country-filter" className="w-48">
                     <SelectValue placeholder="All countries" />
                   </SelectTrigger>
@@ -640,7 +647,7 @@ export default function DashboardPage() {
                 <Label htmlFor="industry-filter" className="text-base text-slate-500">
                   Industry
                 </Label>
-                <Select value={industryFilter} onValueChange={setIndustryFilter}>
+                <Select value={industryFilter} onValueChange={(v) => { setIndustryFilter(v); bizPagination.setPage(1); }}>
                   <SelectTrigger id="industry-filter" className="w-48">
                     <SelectValue placeholder="All industries" />
                   </SelectTrigger>
@@ -660,8 +667,9 @@ export default function DashboardPage() {
                 No businesses match these filters.
               </p>
             ) : (
+              <>
               <ul className="mt-3 divide-y divide-slate-100">
-                {filteredCompanies.map((c) => (
+                {bizPagination.pageItems.map((c) => (
                   <li key={c.id} className="py-3">
                     <button
                       type="button"
@@ -747,6 +755,8 @@ export default function DashboardPage() {
                   </li>
                 ))}
               </ul>
+              <Pager page={bizPagination.page} totalPages={bizPagination.totalPages} onPage={bizPagination.setPage} />
+              </>
             )}
           </>
         )}

@@ -43,7 +43,7 @@ export default function TemplatesPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const params = new URLSearchParams({ page: String(page), limit: "20" });
+    const params = new URLSearchParams({ page: String(page), limit: "10" });
     if (applied.search) params.set("search", applied.search);
     if (applied.industry) params.set("industry", applied.industry);
     api<{ items: Template[]; total: number; totalPages: number }>(

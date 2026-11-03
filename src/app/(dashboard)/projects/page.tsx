@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { MoreHorizontal } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -91,6 +93,7 @@ const emptyForm = {
 export default function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [items, setItems] = useState<Project[]>([]);
+  const { page, totalPages, pageItems, setPage } = usePagination(items);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -266,7 +269,7 @@ export default function ProjectsPage() {
       <div className="mt-4 hidden flex-wrap gap-2 md:flex">
         <Label className="text-base text-slate-600">
           Status{" "}
-          <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+          <Select value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger className="w-auto"><SelectValue placeholder="All" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
@@ -295,7 +298,7 @@ export default function ProjectsPage() {
       >
         <div className="space-y-2">
           <Label>Status</Label>
-          <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+          <Select value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
@@ -435,7 +438,7 @@ export default function ProjectsPage() {
         </Card>
       )}
       <div className="mt-4 grid gap-4">
-        {items.map((item) => (
+        {pageItems.map((item) => (
           <Card key={item.id}><CardContent className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -472,6 +475,7 @@ export default function ProjectsPage() {
           </CardContent></Card>
         ))}
       </div>
+      {items.length > 0 && <Pager page={page} totalPages={totalPages} onPage={setPage} />}
 
       <ConfirmDialog
         open={confirmItem !== null}

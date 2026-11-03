@@ -14,13 +14,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -46,31 +39,39 @@ export type DataTableColumn<T> = {
  * Professional client-side table: text filter, column sorting, column
  * visibility, row selection (count toolbar; no bulk mutation — no bulk API
  * exists, so selection never deletes or edits anything), sticky header,
- * dense 40px rows, right-aligned numbers, pagination.
- * Works over the rows already fetched for the current page/filter from the API.
+ * dense 40px rows, right-aligned numbers, fixed 10-rows-per-page
+ * pagination. Works over the rows already fetched for the current
+ * page/filter from the API.
  */
 export function DataTable<T extends { id: string }>({
   rows,
   columns,
   searchPlaceholder = "Search…",
-  initialPageSize = 10,
   emptyMessage = "No records found.",
   selectable = false,
+  paginate = true,
 }: {
   rows: T[];
   columns: DataTableColumn<T>[];
   searchPlaceholder?: string;
-  initialPageSize?: number;
   emptyMessage?: string;
   selectable?: boolean;
+  /**
+   * Set false when the rows are already one server-fetched page and the
+   * page drives its own single pager below the table — avoids two
+   * competing pagers on the same table.
+   */
+  paginate?: boolean;
 }) {
   const [query, setQuery] = React.useState("");
   const [sortKey, setSortKey] = React.useState<string | null>(null);
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
   const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(initialPageSize);
   const [hidden, setHidden] = React.useState<Set<string>>(new Set());
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+
+  // Fixed page size for every table in the app (no per-table exceptions).
+  const pageSize = 10;
 
   const visibleColumns = columns.filter((c) => !hidden.has(c.key));
 
@@ -102,9 +103,11 @@ export function DataTable<T extends { id: string }>({
     return out;
   }, [rows, query, sortKey, sortDir, columns]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, pageCount);
-  const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pageCount = paginate ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
+  const safePage = paginate ? Math.min(page, pageCount) : 1;
+  const pageRows = paginate
+    ? filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
+    : filtered;
   const allPageSelected =
     pageRows.length > 0 && pageRows.every((r) => selected.has(r.id));
 
@@ -171,25 +174,6 @@ export function DataTable<T extends { id: string }>({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <span className="text-sm text-slate-500">Rows per page</span>
-          <Select
-            value={String(pageSize)}
-            onValueChange={(v) => {
-              setPageSize(Number(v));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-24">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[10, 25, 50].map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </div>
       {selected.size > 0 ? (
@@ -300,20 +284,41 @@ export function DataTable<T extends { id: string }>({
           </TableBody>
         </Table>
       </div>
+      {paginate ? (
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-500">
           Showing {pageRows.length} of {filtered.length} records
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="min-h-11"
             disabled={safePage <= 1}
             onClick={() => setPage(safePage - 1)}
           >
             <ChevronLeft className="size-5" /> Previous
           </Button>
+          {(() => {
+            const start = Math.max(1, Math.min(safePage - 2, pageCount - 4));
+            const end = Math.min(pageCount, start + 4);
+            const nums: number[] = [];
+            for (let p = start; p <= end; p++) nums.push(p);
+            return nums.map((p) => (
+              <Button
+                key={p}
+                type="button"
+                variant={p === safePage ? "default" : "outline"}
+                size="sm"
+                className="min-h-11 min-w-11 px-2"
+                aria-current={p === safePage ? "page" : undefined}
+                onClick={() => setPage(p)}
+              >
+                {p}
+              </Button>
+            ));
+          })()}
           <span className="text-sm text-slate-600">
             Page {safePage} of {pageCount}
           </span>
@@ -321,6 +326,7 @@ export function DataTable<T extends { id: string }>({
             type="button"
             variant="outline"
             size="sm"
+            className="min-h-11"
             disabled={safePage >= pageCount}
             onClick={() => setPage(safePage + 1)}
           >
@@ -328,6 +334,7 @@ export function DataTable<T extends { id: string }>({
           </Button>
         </div>
       </div>
+      ) : null}
     </div>
   );
 }

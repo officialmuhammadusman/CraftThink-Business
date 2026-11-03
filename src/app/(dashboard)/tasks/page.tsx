@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,6 +38,7 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
   const [items, setItems] = useState<Task[]>([]);
+  const { page, totalPages, pageItems, setPage } = usePagination(items);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -96,7 +99,7 @@ export default function TasksPage() {
       <div className="mt-4 hidden flex-wrap items-center gap-3 md:flex">
         <Label className="text-base text-slate-600">
           Status{" "}
-          <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+          <Select value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger className="w-auto"><SelectValue placeholder="All" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
@@ -107,7 +110,7 @@ export default function TasksPage() {
           </Select>
         </Label>
         <Label htmlFor="mine-only" className="flex items-center gap-1 py-2.5 text-base text-slate-600">
-          <Checkbox id="mine-only" checked={mineOnly} onCheckedChange={(v) => setMineOnly(v === true)} />
+          <Checkbox id="mine-only" checked={mineOnly} onCheckedChange={(v) => { setMineOnly(v === true); setPage(1); }} />
           Assigned to me only
         </Label>
       </div>
@@ -130,7 +133,7 @@ export default function TasksPage() {
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Status</Label>
-            <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+            <Select value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
               <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
@@ -141,7 +144,7 @@ export default function TasksPage() {
             </Select>
           </div>
           <Label htmlFor="mine-only-sheet" className="flex items-center gap-2 py-2.5 text-base text-slate-600">
-            <Checkbox id="mine-only-sheet" checked={mineOnly} onCheckedChange={(v) => setMineOnly(v === true)} />
+            <Checkbox id="mine-only-sheet" checked={mineOnly} onCheckedChange={(v) => { setMineOnly(v === true); setPage(1); }} />
             Assigned to me only
           </Label>
         </div>
@@ -165,7 +168,7 @@ export default function TasksPage() {
         </Card>
       )}
       <div className="mt-4 grid gap-4">
-        {items.map((task) => (
+        {pageItems.map((task) => (
           <Card key={task.id}><CardContent className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -193,6 +196,7 @@ export default function TasksPage() {
           </CardContent></Card>
         ))}
       </div>
+      {items.length > 0 && <Pager page={page} totalPages={totalPages} onPage={setPage} />}
     </div>
   );
 }

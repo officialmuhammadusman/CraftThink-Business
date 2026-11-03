@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import Pager from "@/components/Pager";
 import { companySchema } from "@/lib/validation";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 import SavedViewsControl from "@/components/SavedViewsControl";
@@ -130,7 +131,7 @@ export default function CompaniesPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ page: String(page), limit: "20" });
+      const params = new URLSearchParams({ page: String(page), limit: "10" });
       if (search) params.set("search", search);
       if (country) params.set("country", country);
       if (currency) params.set("currency", currency);
@@ -754,21 +755,11 @@ export default function CompaniesPage() {
               rows={items}
               columns={columns}
               searchPlaceholder="Search within this page…"
-              initialPageSize={20}
+              paginate={false}
               emptyMessage="No companies on this page."
             />
           </div>
-          <div className="mt-3 flex items-center gap-2 text-base">
-            <Button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} variant="outline">
-              Previous
-            </Button>
-            <span className="text-slate-500">
-              Page {page} of {totalPages}
-            </span>
-            <Button type="button" disabled={page >= totalPages} onClick={() => setPage(page + 1)} variant="outline">
-              Next
-            </Button>
-          </div>
+          <Pager page={page} totalPages={totalPages} onPage={setPage} />
         </>
       )}
 

@@ -56,7 +56,7 @@ export default function SuppressionPage() {
 
   const load = (p: number, s: string) => {
     setLoading(true);
-    const params = new URLSearchParams({ page: String(p), limit: "20" });
+    const params = new URLSearchParams({ page: String(p), limit: "10" });
     if (s) params.set("search", s);
     api<{ items: Row[]; total: number; totalPages: number }>(
       `/api/suppression?${params}`,

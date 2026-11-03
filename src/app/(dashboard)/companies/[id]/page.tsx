@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { companySchema, contactSchema } from "@/lib/validation";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 import {
@@ -97,6 +99,13 @@ type PendingConfirm =
 
 export default function CompanyDetailPage({ params }: { params: { id: string } }) {
   const [company, setCompany] = useState<Detail | null>(null);
+  const contactsPagination = usePagination(company?.contacts ?? []);
+  const activityPagination = usePagination(company?.activityLog ?? []);
+  const emailPagination = usePagination(company?.emailActivities ?? []);
+  const followUpPagination = usePagination(company?.followUps ?? []);
+  const meetingPagination = usePagination(company?.meetings ?? []);
+  const dealPagination = usePagination(company?.deals ?? []);
+  const projectPagination = usePagination(company?.projects ?? []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -496,8 +505,9 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
             {company.contacts.length === 0 ? (
               <p className="mt-2 text-base text-slate-500">No contacts yet.</p>
             ) : (
+              <>
               <ul className="mt-3 space-y-2">
-                {company.contacts.map((c) => (
+                {contactsPagination.pageItems.map((c) => (
                   <li key={c.id} className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-base">
                     <span>
                       <span className="font-medium text-slate-900">{c.fullName}</span>
@@ -519,6 +529,8 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
                   </li>
                 ))}
               </ul>
+              {company.contacts.length > 0 && <Pager page={contactsPagination.page} totalPages={contactsPagination.totalPages} onPage={contactsPagination.setPage} />}
+              </>
             )}
             <form onSubmit={addContact} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Label className="text-base font-medium text-slate-700">
@@ -612,8 +624,9 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
             {company.activityLog.length === 0 ? (
               <p className="mt-2 text-base text-slate-500">No activity recorded yet.</p>
             ) : (
+              <>
               <ul className="mt-3 space-y-2 text-base">
-                {company.activityLog.map((a) => (
+                {activityPagination.pageItems.map((a) => (
                   <li key={a.id} className="text-slate-600">
                     <span className="font-medium text-slate-900">{a.actor?.name ?? "System"}</span>
                     {" "}{a.action.replaceAll("_", " ").toLowerCase()} {a.entityType}
@@ -621,6 +634,8 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
                   </li>
                 ))}
               </ul>
+              {company.activityLog.length > 0 && <Pager page={activityPagination.page} totalPages={activityPagination.totalPages} onPage={activityPagination.setPage} />}
+              </>
             )}
           </section>
         </TabsContent>
@@ -631,8 +646,9 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
             {company.emailActivities.length === 0 ? (
               <p className="mt-2 text-base text-slate-500">No emails tracked for this company yet.</p>
             ) : (
+              <>
               <ul className="mt-3 space-y-2 text-base">
-                {company.emailActivities.map((e) => (
+                {emailPagination.pageItems.map((e) => (
                   <li key={e.id} className="text-slate-600">
                     <span className="font-medium text-slate-900">{e.subject}</span>
                     <span className="block text-sm text-slate-500">
@@ -642,6 +658,8 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
                   </li>
                 ))}
               </ul>
+              {company.emailActivities.length > 0 && <Pager page={emailPagination.page} totalPages={emailPagination.totalPages} onPage={emailPagination.setPage} />}
+              </>
             )}
           </section>
         </TabsContent>
@@ -652,14 +670,17 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
             {company.followUps.length === 0 ? (
               <p className="mt-2 text-base text-slate-500">No follow-ups.</p>
             ) : (
+              <>
               <ul className="mt-3 space-y-2 text-base">
-                {company.followUps.map((f) => (
+                {followUpPagination.pageItems.map((f) => (
                   <li key={f.id} className="text-slate-600">
                     {fmt(f.dueDate)} · {f.status}
                     {f.reason ? ` · ${f.reason}` : ""}
                   </li>
                 ))}
               </ul>
+              {company.followUps.length > 0 && <Pager page={followUpPagination.page} totalPages={followUpPagination.totalPages} onPage={followUpPagination.setPage} />}
+              </>
             )}
           </section>
         </TabsContent>
@@ -670,13 +691,16 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
             {company.meetings.length === 0 ? (
               <p className="mt-2 text-base text-slate-500">No meetings.</p>
             ) : (
+              <>
               <ul className="mt-3 space-y-2 text-base">
-                {company.meetings.map((m) => (
+                {meetingPagination.pageItems.map((m) => (
                   <li key={m.id} className="text-slate-600">
                     {m.title} · {fmt(m.dateTime)} · {m.status.replaceAll("_", " ")}
                   </li>
                 ))}
               </ul>
+              {company.meetings.length > 0 && <Pager page={meetingPagination.page} totalPages={meetingPagination.totalPages} onPage={meetingPagination.setPage} />}
+              </>
             )}
           </section>
         </TabsContent>
@@ -687,8 +711,9 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
             {company.deals.length === 0 ? (
               <p className="mt-2 text-base text-slate-500">No deals.</p>
             ) : (
+              <>
               <ul className="mt-3 space-y-2 text-base">
-                {company.deals.map((d) => (
+                {dealPagination.pageItems.map((d) => (
                   <li key={d.id} className="text-slate-600">
                     <Link href="/deals" className="font-medium text-brand-600 hover:underline">{d.title}</Link>
                     {" · "}{d.status.replaceAll("_", " ")}
@@ -696,17 +721,20 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
                   </li>
                 ))}
               </ul>
+              {company.deals.length > 0 && <Pager page={dealPagination.page} totalPages={dealPagination.totalPages} onPage={dealPagination.setPage} />}
+              </>
             )}
             {company.projects.length > 0 && (
               <>
                 <h2 className="mt-5 text-base font-semibold text-slate-900">Projects</h2>
                 <ul className="mt-3 space-y-2 text-base">
-                  {company.projects.map((p) => (
+                  {projectPagination.pageItems.map((p) => (
                     <li key={p.id} className="text-slate-600">
                       {p.name} · {p.status.replaceAll("_", " ")}
                     </li>
                   ))}
                 </ul>
+                {company.projects.length > 0 && <Pager page={projectPagination.page} totalPages={projectPagination.totalPages} onPage={projectPagination.setPage} />}
               </>
             )}
           </section>

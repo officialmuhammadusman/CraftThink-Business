@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -96,6 +98,7 @@ export default function ProjectDetailPage() {
   const projectId = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const { page, totalPages, pageItems, setPage } = usePagination(tasks);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -430,7 +433,7 @@ export default function ProjectDetailPage() {
         </div>
       )}
       <div className="mt-3 grid gap-4">
-        {tasks.map((task) => {
+        {pageItems.map((task) => {
           const isAssignee = task.assignedTo?.id === meId;
           const canEdit = canManageTasks || isAssignee;
           return (
@@ -507,6 +510,7 @@ export default function ProjectDetailPage() {
           );
         })}
       </div>
+      {tasks.length > 0 && <Pager page={page} totalPages={totalPages} onPage={setPage} />}
 
       <ConfirmDialog
         open={confirmTask !== null}

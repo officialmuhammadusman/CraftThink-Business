@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { ResponsiveDialog } from "@/components/ui/responsive-dialog";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import Pager from "@/components/Pager";
 import {
   api,
   ErrorAlert,
@@ -68,7 +69,7 @@ export default function EmailsPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const params = new URLSearchParams({ page: String(page), limit: "20" });
+    const params = new URLSearchParams({ page: String(page), limit: "10" });
     if (applied.search) params.set("search", applied.search);
     if (applied.status) params.set("status", applied.status);
     if (applied.campaignId) params.set("campaignId", applied.campaignId);
@@ -395,19 +396,11 @@ export default function EmailsPage() {
                 rows={data.items}
                 columns={columns}
                 searchPlaceholder="Search within this page…"
-                initialPageSize={20}
+                paginate={false}
                 emptyMessage="No tracked emails on this page."
               />
             </div>
-            <div className="mt-4 flex items-center gap-2">
-              <Button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} variant="outline">
-                Previous
-              </Button>
-              <span className="text-base text-slate-500">Page {page} of {data.totalPages}</span>
-              <Button type="button" disabled={page >= data.totalPages} onClick={() => setPage(page + 1)} variant="outline">
-                Next
-              </Button>
-            </div>
+            <Pager page={page} totalPages={data.totalPages} onPage={setPage} />
           </>
         )}
       </div>

@@ -22,6 +22,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorDialog } from "@/components/ui/responsive-dialog";
 import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
 import { meetingSchema } from "@/lib/validation";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 
@@ -80,6 +82,7 @@ function MeetingsInner() {
   const presetCompany = searchParams.get("companyId") ?? "";
   const [statusFilter, setStatusFilter] = useState("");
   const [items, setItems] = useState<Meeting[]>([]);
+  const { page, totalPages, pageItems, setPage } = usePagination(items);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -402,7 +405,7 @@ function MeetingsInner() {
       <Card className="mt-4">
         <CardContent className="space-y-2 p-4 sm:p-6">
         <Label htmlFor="meeting-status-filter">Status filter</Label>
-          <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+          <Select value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger id="meeting-status-filter"><SelectValue placeholder="All statuses" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
@@ -436,8 +439,9 @@ function MeetingsInner() {
           />
         </div>
       ) : (
+        <>
         <ul className="mt-4 space-y-3">
-          {items.map((item) => (
+          {pageItems.map((item) => (
             <li key={item.id}>
               <Card>
                 <CardContent className="space-y-3 p-4 sm:p-6">
@@ -487,6 +491,8 @@ function MeetingsInner() {
             </li>
           ))}
         </ul>
+        <Pager page={page} totalPages={totalPages} onPage={setPage} />
+        </>
       )}
 
       <ConfirmDialog

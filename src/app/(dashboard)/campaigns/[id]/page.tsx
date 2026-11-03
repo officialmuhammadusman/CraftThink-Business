@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorDialog } from "@/components/ui/responsive-dialog";
@@ -43,6 +45,7 @@ export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [detail, setDetail] = useState<Detail | null>(null);
+  const activitiesPagination = usePagination(detail?.activities ?? []);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -147,7 +150,7 @@ export default function CampaignDetailPage() {
           ) : (
             <>
               <div className="grid gap-3 md:hidden">
-                {detail.activities.map((a) => (
+                {activitiesPagination.pageItems.map((a) => (
                   <Card key={a.id}>
                     <CardContent className="p-4">
                       <Link href={`/emails/${a.id}`} className="inline-flex min-h-12 items-center text-base font-medium text-brand-600 hover:underline">
@@ -174,7 +177,7 @@ export default function CampaignDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {detail.activities.map((a) => (
+                    {activitiesPagination.pageItems.map((a) => (
                       <TableRow key={a.id}>
                         <TableCell className="py-2">
                           <Link href={`/emails/${a.id}`} className="font-medium text-brand-600 hover:underline">
@@ -190,6 +193,7 @@ export default function CampaignDetailPage() {
                   </TableBody>
                 </Table>
               </div>
+              {detail.activities.length > 0 && <Pager page={activitiesPagination.page} totalPages={activitiesPagination.totalPages} onPage={activitiesPagination.setPage} />}
             </>
           )}
         </CardContent>

@@ -17,6 +17,8 @@ import { ResponsiveDialog, ErrorDialog } from "@/components/ui/responsive-dialog
 import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
 import { quoteSchema } from "@/lib/validation";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 
@@ -50,6 +52,7 @@ function QuotesInner() {
   const searchParams = useSearchParams();
   const presetDeal = searchParams.get("dealId") ?? "";
   const [items, setItems] = useState<Quote[]>([]);
+  const { page, totalPages, pageItems, setPage } = usePagination(items);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -228,7 +231,7 @@ function QuotesInner() {
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block space-y-2 text-base font-medium text-slate-700">
           Filter by deal
-          <Select value={dealFilter || "all"} onValueChange={(v) => setDealFilter(v === "all" ? "" : v)}>
+          <Select value={dealFilter || "all"} onValueChange={(v) => { setDealFilter(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger><SelectValue placeholder="Any deal" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Any deal</SelectItem>
@@ -240,7 +243,7 @@ function QuotesInner() {
         </label>
         <label className="block space-y-2 text-base font-medium text-slate-700">
           Filter by status
-          <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+          <Select value={statusFilter || "all"} onValueChange={(v) => { setStatusFilter(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger><SelectValue placeholder="Any status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Any status</SelectItem>
@@ -274,8 +277,9 @@ function QuotesInner() {
           />
         </div>
       ) : (
+        <>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {items.map((q) => (
+          {pageItems.map((q) => (
             <Card key={q.id}>
               <CardContent className="space-y-2 p-4">
                 <p className="text-base font-medium text-slate-900">{q.title}</p>
@@ -303,6 +307,8 @@ function QuotesInner() {
             </Card>
           ))}
         </div>
+        <Pager page={page} totalPages={totalPages} onPage={setPage} />
+        </>
       )}
 
       <ConfirmDialog

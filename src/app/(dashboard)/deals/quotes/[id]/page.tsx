@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ResponsiveDialog, ErrorDialog } from "@/components/ui/responsive-dialog";
@@ -51,6 +53,7 @@ async function readError(response: Response, fallback: string): Promise<string> 
 
 export default function QuoteDetailPage({ params }: { params: { id: string } }) {
   const [quote, setQuote] = useState<Quote | null>(null);
+  const linesPagination = usePagination(quote?.lineItems ?? []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -306,8 +309,9 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
           {quote.lineItems.length === 0 ? (
             <p className="text-base text-slate-500">No line items yet. Add the first one below.</p>
           ) : (
+            <>
             <ul className="space-y-2">
-              {quote.lineItems.map((li) => (
+              {linesPagination.pageItems.map((li) => (
                 <li key={li.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-base">
                   <span>
                     <span className="font-medium text-slate-900">{li.description}</span>
@@ -322,6 +326,8 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
                 </li>
               ))}
             </ul>
+            {quote.lineItems.length > 0 && <Pager page={linesPagination.page} totalPages={linesPagination.totalPages} onPage={linesPagination.setPage} />}
+            </>
           )}
           <form onSubmit={addLine} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Label className="text-base font-medium text-slate-700">

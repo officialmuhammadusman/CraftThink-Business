@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
 import { memberCreateSchema } from "@/lib/validation";
@@ -93,6 +95,7 @@ function grantsToMap(grants: Grant[] | undefined): Record<string, string> {
 
 export default function TeamPage() {
   const [items, setItems] = useState<Member[]>([]);
+  const { page, totalPages, pageItems, setPage } = usePagination(items);
   const [perms, setPerms] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -271,7 +274,7 @@ export default function TeamPage() {
         </div>
       )}
       <div className="mt-4 grid gap-4">
-        {items.map((m) => {
+        {pageItems.map((m) => {
           const isSuperAdmin = m.role === "SUPER_ADMIN";
           const memberPerms = perms[m.id] ?? grantsToMap(m.permissionGrants);
           return (
@@ -331,6 +334,7 @@ export default function TeamPage() {
           );
         })}
       </div>
+      {items.length > 0 && <Pager page={page} totalPages={totalPages} onPage={setPage} />}
     </div>
   );
 }

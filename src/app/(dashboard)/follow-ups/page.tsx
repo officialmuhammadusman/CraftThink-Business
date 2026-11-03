@@ -1,6 +1,8 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
+import { usePagination } from "@/components/use-pagination";
+import Pager from "@/components/Pager";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,7 @@ function FollowUpsInner() {
   const presetCompany = searchParams.get("companyId") ?? "";
   const [view, setView] = useState<"today" | "overdue" | "upcoming" | "all">("today");
   const [items, setItems] = useState<FollowUp[]>([]);
+  const { page, totalPages, pageItems, setPage } = usePagination(items);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -283,7 +286,10 @@ function FollowUpsInner() {
           <button
             key={v.value}
             type="button"
-            onClick={() => setView(v.value)}
+            onClick={() => {
+              setView(v.value);
+              setPage(1);
+            }}
             aria-pressed={view === v.value}
             className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-base font-medium ${
               view === v.value
@@ -318,8 +324,9 @@ function FollowUpsInner() {
           />
         </div>
       ) : (
+        <>
         <ul className="mt-4 space-y-3">
-          {items.map((item) => (
+          {pageItems.map((item) => (
             <li key={item.id}>
               <Card>
                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
@@ -353,6 +360,8 @@ function FollowUpsInner() {
             </li>
           ))}
         </ul>
+        <Pager page={page} totalPages={totalPages} onPage={setPage} />
+        </>
       )}
 
       <ConfirmDialog

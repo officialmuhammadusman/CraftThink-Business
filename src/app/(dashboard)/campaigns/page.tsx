@@ -34,7 +34,7 @@ export default function CampaignsPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const params = new URLSearchParams({ page: String(page), limit: "20" });
+    const params = new URLSearchParams({ page: String(page), limit: "10" });
     if (appliedSearch) params.set("search", appliedSearch);
     api<{ items: Campaign[]; total: number; totalPages: number }>(
       `/api/campaigns?${params}`,
