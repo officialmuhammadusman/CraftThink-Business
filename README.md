@@ -162,3 +162,95 @@ via `PUT /api/users/[id]/permissions` (Super Admin only, audit-logged);
 members start with no access until granted. Full matrix, assigned-scope
 definitions, and exceptions (e.g. suppression list requires `EMAILS=ALL`,
 suppression removal stays Super-Admin-only): see `docs/rbac-matrix.md`.
+
+## CRM gap updates (2026-11-03, built locally, NOT deployed yet)
+
+Schema changes are additive only (applied by `prisma db push` on deploy).
+No email-sending code, Gmail OAuth, calendar sync, or external service
+was added. Permission logic itself is unchanged.
+
+### 1. International contact model
+Company and Contact both carry `timezone` (free text, e.g.
+Asia/Karachi, Europe/London, America/New_York), `language` (free text,
+e.g. English, Spanish), `currency` (ISO code; UI Select offers USD, EUR,
+GBP, AED, SAR, PKR), and `gdprConsentNote` (text). Contact additionally
+carries `gdprConsent` (boolean, default false — consent is never
+assumed). All four are in the Zod schemas, create/edit forms, detail
+pages, and list filters (companies list: country/currency/language).
+The existing `country` field is untouched.
+
+### 2. Multi-currency, done safely
+Currencies are NEVER mixed in one total. Deals list/board totals, the
+dashboard won-value chart, and weighted pipeline value are grouped BY
+currency — one labelled total per currency (e.g. "USD 12,000 ·
+EUR 8,500"). A deal with no/empty currency falls in an "Unspecified"
+group, never merged into another currency's total. Helpers:
+`src/lib/currency.ts` (`groupTotalsByCurrency`, `formatCurrencyTotals`).
+The dashboard won chart is now grouped by month AND currency, plus a
+per-currency totals line (`wonRevenueByCurrency`).
+
+### 3. Saved views
+On the Companies and Deals lists, the signed-in user can save the
+current filter set under a name, apply one in one tap, and delete it.
+Model `SavedView` (userId FK cascade, module "companies"|"deals", name,
+filters Json, `@@index([userId, module])`); API under `/api/saved-views`
+(GET mine, POST, DELETE mine only — another user's view can never be
+read/applied/deleted). Applying a view only ever filters: list routes
+still AND the caller's PermissionGrant scope, so a view can never widen
+access.
+
+### 4. Basic quote record
+Model `Quote` (dealId FK SetNull on deal delete — same as
+Project.dealId; companyId denormalised from the deal's company at
+creation, so quotes stay listable per company after a deal is deleted;
+title, currency default USD, status DRAFT|SENT|ACCEPTED|REJECTED,
+notes, createdById FK SetNull) plus `QuoteLineItem` (quoteId FK cascade,
+description, quantity, unitPrice, position). The total is NEVER
+hand-typed: total = sum(quantity × unitPrice), computed server-side on
+every read and every line-item write, and no total column is stored.
+Full CRUD API under `/api/quotes` (incl. `/lines` endpoints); list and
+detail pages under Deals (`/deals/quotes`, `/deals/quotes/[id]`), every
+deal card links to its quotes, and the detail page has a Print button
+using a browser print stylesheet (`.quote-print` in globals.css, no PDF
+service). Permission module is DEALS, since quotes belong to deals —
+documented choice, no new grant module added. Accepting a quote does
+NOT change the deal stage; the user moves the deal explicitly.
+
+### 5. Simple internal automation (no external service)
+When an email activity's status is set to FOLLOW_UP_REQUIRED through any
+API path that changes email status (status endpoint, email PATCH,
+email create, email CSV import) AND the email has no followUpDate, the
+API automatically creates one PENDING FollowUp for the email's assigned
+employee (falling back to the acting user), dated 3 days after the
+status change, reason "Auto follow-up from email", notes referencing
+the email subject. De-duplication: auto rows carry
+`FollowUp.autoForEmailId` (the email id); the API checks it before
+creating, so re-saves never duplicate. Implementation:
+`maybeCreateAutoFollowUp` in `src/app/api/emails/shared.ts`. The auto
+row's reason deliberately differs from the `Follow-up for tracked email
+<id>` prefix used by `syncFollowUpForActivity`, so the two mechanisms
+never clobber each other (sync only touches prefix rows, and only when
+a followUpDate exists — exactly when this automation does not run).
+The deals Stale/rotting flag (kanban rule: open deal whose
+expected-close day has passed OR updatedAt, fallback createdAt, is 30+
+days old) now shows on the deals LIST view as well — both views render
+the same deal card, so the flag is present in both by construction.
+
+### 6. Pipeline stage rules
+Stage exit checks, enforced SERVER-SIDE in the deal move route (and in
+deal PATCH when the stage changes, against the resulting figures):
+moving to PROPOSAL_SENT requires estimatedBudget OR finalPrice present;
+moving to WON requires finalPrice present. Other moves are unchanged,
+and the error message returned to the UI names the missing figure.
+Stage probabilities are a FIXED display standard, never per-deal
+invented values, in `src/lib/deal-stages.ts`:
+New Lead 10, Contacted 20, Follow-up 30, Interested 40,
+Meeting Scheduled 50, Meeting Completed 60, Proposal Sent 70,
+Negotiation 80, Won 100, Lost 0. The probability shows on deal cards
+(list + board); weighted pipeline value (value × probability / 100,
+grouped by currency) shows on the deals page.
+
+### Stretch (not built)
+Multiple pipelines (a Pipeline model, existing deals assigned to a
+Default pipeline, pipeline selector on the deals page) was NOT built —
+it is the next item after items 1–6 above.

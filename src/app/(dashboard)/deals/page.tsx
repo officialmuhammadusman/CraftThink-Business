@@ -19,19 +19,11 @@ import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
 import { dealSchema } from "@/lib/validation";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
+import { DEAL_STAGES, dealProbability, staleReason } from "@/lib/deal-stages";
+import { SUPPORTED_CURRENCIES, groupTotalsByCurrency, formatCurrencyTotals } from "@/lib/currency";
+import SavedViewsControl from "@/components/SavedViewsControl";
 
-const STAGES = [
-  "NEW_LEAD",
-  "CONTACTED",
-  "FOLLOW_UP",
-  "INTERESTED",
-  "MEETING_SCHEDULED",
-  "MEETING_COMPLETED",
-  "PROPOSAL_SENT",
-  "NEGOTIATION",
-  "WON",
-  "LOST",
-];
+const STAGES = [...DEAL_STAGES];
 
 type Deal = {
   id: string;
@@ -51,27 +43,10 @@ type Deal = {
   updatedAt?: string;
 };
 
-/**
- * Rotting rule: an open deal (not WON/LOST) is stale when its expected close
- * date has passed, or when it has not been updated in 30+ days (updatedAt
- * from the API, falling back to createdAt). Never invents an activity date.
- */
-function staleReason(deal: Deal): string | null {
-  if (deal.status === "WON" || deal.status === "LOST") return null;
-  if (deal.expectedCloseDate) {
-    const close = new Date(deal.expectedCloseDate);
-    close.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (close < today) return "Close date passed";
-  }
-  const ref = deal.updatedAt ?? deal.createdAt;
-  if (ref) {
-    const days = (Date.now() - new Date(ref).getTime()) / 86400000;
-    if (days >= 30) return "No update in 30+ days";
-  }
-  return null;
-}
+// Stale/rotting rule lives in src/lib/deal-stages.ts (shared standard):
+// open deal whose expected-close day has passed, or updatedAt (fallback
+// createdAt) 30+ days old. dealCard below is used by BOTH the board and
+// the list view, so the Stale flag shows in both views by construction.
 type Company = { id: string; name: string };
 type Contact = { id: string; fullName: string };
 type Assignee = { id: string; name: string; role: string };
@@ -109,6 +84,10 @@ function DealsInner() {
   const searchParams = useSearchParams();
   const presetCompany = searchParams.get("companyId") ?? "";
   const [view, setView] = useState<"board" | "list">("board");
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterCurrency, setFilterCurrency] = useState("");
+  const [filterCompany, setFilterCompany] = useState("");
   const [items, setItems] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +125,12 @@ function DealsInner() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/deals?limit=100");
+      const params = new URLSearchParams({ limit: "100" });
+      if (filterSearch) params.set("search", filterSearch);
+      if (filterStatus) params.set("status", filterStatus);
+      if (filterCurrency) params.set("currency", filterCurrency);
+      if (filterCompany) params.set("companyId", filterCompany);
+      const response = await fetch(`/api/deals?${params}`);
       if (!response.ok) throw new Error(await readError(response, "Failed to load deals"));
       const payload = await response.json();
       setItems(payload.data.items as Deal[]);
@@ -157,7 +141,24 @@ function DealsInner() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filterSearch, filterStatus, filterCurrency, filterCompany]);
+
+  function applySavedFilters(filters: Record<string, string>) {
+    setFilterSearch(filters.search ?? "");
+    setFilterStatus(filters.status ?? "");
+    setFilterCurrency(filters.currency ?? "");
+    setFilterCompany(filters.companyId ?? "");
+  }
+
+  // Multi-currency totals: grouped BY currency, never mixed. Weighted
+  // pipeline value = value × stage probability / 100, also per currency.
+  // These cover the loaded deals (up to 100) shown on this page.
+  const dealValue = (d: Deal) => d.finalPrice ?? d.estimatedBudget ?? null;
+  const totals = groupTotalsByCurrency(items, (d) => d.currency, dealValue);
+  const weightedTotals = groupTotalsByCurrency(items, (d) => d.currency, (d) => {
+    const v = dealValue(d);
+    return v == null ? null : (v * dealProbability(d.status)) / 100;
+  });
 
   useEffect(() => {
     load();
@@ -347,6 +348,7 @@ function DealsInner() {
         <p className="text-base font-medium text-slate-900">{deal.title}</p>
         <p className="flex flex-wrap items-center gap-2">
           <Badge variant={stageBadgeVariant(deal.status)}>{deal.status.replaceAll("_", " ")}</Badge>
+          <Badge variant="secondary">{dealProbability(deal.status)}% probability</Badge>
           {stale ? <Badge variant="destructive">Stale · {stale}</Badge> : null}
         </p>
         <p className="text-base text-slate-500">
@@ -399,6 +401,9 @@ function DealsInner() {
             )}
           </div>
         )}
+        <Button type="button" variant="outline" className="w-full" asChild>
+          <Link href={`/deals/quotes?dealId=${deal.id}`}>Quotes for this deal</Link>
+        </Button>
         <Button type="button" variant="ghost" className="w-full text-red-600 hover:text-red-700" onClick={() => setConfirmDeal(deal)}>
           Delete
         </Button>
@@ -468,7 +473,14 @@ function DealsInner() {
           </label>
           <label className="block space-y-2 text-base font-medium text-slate-700">
             Currency
-            <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className={inputCls} />
+            <Select value={form.currency || "USD"} onValueChange={(v) => setForm({ ...form, currency: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <FieldError message={fieldErrors.currency} />
           </label>
           <label className="block space-y-2 text-base font-medium text-slate-700">
@@ -514,6 +526,78 @@ function DealsInner() {
         </div>
         <Button type="submit" disabled={submitting} className="w-full sm:w-auto">{submitting ? "Creating…" : "Create deal"}</Button>
         </form>
+        </CardContent>
+      </Card>
+
+      <div className="mt-6">
+        <SavedViewsControl
+          module="deals"
+          currentFilters={{
+            ...(filterSearch ? { search: filterSearch } : {}),
+            ...(filterStatus ? { status: filterStatus } : {}),
+            ...(filterCurrency ? { currency: filterCurrency } : {}),
+            ...(filterCompany ? { companyId: filterCompany } : {}),
+          }}
+          onApply={applySavedFilters}
+        />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="block space-y-2 text-base font-medium text-slate-700">
+          Search
+          <input value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} placeholder="Search titles…" className={inputCls} />
+        </label>
+        <label className="block space-y-2 text-base font-medium text-slate-700">
+          Stage
+          <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}>
+            <SelectTrigger><SelectValue placeholder="Any stage" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any stage</SelectItem>
+              {STAGES.map((s) => (
+                <SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="block space-y-2 text-base font-medium text-slate-700">
+          Currency
+          <Select value={filterCurrency || "all"} onValueChange={(v) => setFilterCurrency(v === "all" ? "" : v)}>
+            <SelectTrigger><SelectValue placeholder="Any currency" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any currency</SelectItem>
+              {SUPPORTED_CURRENCIES.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="block space-y-2 text-base font-medium text-slate-700">
+          Company
+          <Select value={filterCompany || "all"} onValueChange={(v) => setFilterCompany(v === "all" ? "" : v)}>
+            <SelectTrigger><SelectValue placeholder="Any company" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any company</SelectItem>
+              {companies.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+      </div>
+
+      <Card className="mt-4">
+        <CardContent className="space-y-1 p-4">
+          <p className="text-base text-slate-700">
+            <span className="font-medium text-slate-900">Pipeline totals (loaded deals, grouped by currency — never mixed): </span>
+            {formatCurrencyTotals(totals)}
+          </p>
+          <p className="text-base text-slate-700">
+            <span className="font-medium text-slate-900">Weighted pipeline value (value × stage probability / 100, per currency): </span>
+            {formatCurrencyTotals(weightedTotals)}
+          </p>
+          <p className="text-sm text-slate-500">
+            Stage probabilities are the fixed display standard (New Lead 10% … Won 100%, Lost 0%). A deal with no currency counts under “Unspecified”.
+          </p>
         </CardContent>
       </Card>
 

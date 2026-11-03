@@ -9,6 +9,7 @@ import {
 } from "@/lib/rbac";
 import { handleRoute, jsonOk, unauthorized, forbidden } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { groupTotalsByCurrency, currencyGroupKey } from "@/lib/currency";
 
 // Read-only chart data for the professional dashboard. Same permission
 // scoping as /api/dashboard/stats: NONE contributes nothing, ASSIGNED only
@@ -110,6 +111,7 @@ export async function GET(req: Request): Promise<NextResponse> {
           status: true,
           finalPrice: true,
           estimatedBudget: true,
+          currency: true,
           expectedCloseDate: true,
           createdAt: true,
         },
@@ -195,26 +197,36 @@ export async function GET(req: Request): Promise<NextResponse> {
     }
 
     // Won revenue: only when won deals actually carry a budget figure.
+    // Multi-currency rule: NEVER mix currencies in one total. Monthly
+    // bars are grouped by month AND currency (label "YYYY-MM · CUR"),
+    // and wonRevenueByCurrency gives one labelled total per currency.
     const wonWithBudget = deals.filter(
       (d) =>
         d.status === "WON" &&
         (d.finalPrice != null || d.estimatedBudget != null),
     );
     let wonRevenue: { label: string; value: number }[] | null = null;
+    let wonRevenueByCurrency: { currency: string; value: number }[] | null = null;
     if (wonWithBudget.length > 0) {
-      const byMonth = new Map<string, number>();
+      const byMonthCurrency = new Map<string, number>();
       for (const d of wonWithBudget) {
         const date = d.expectedCloseDate ?? d.createdAt;
-        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-        byMonth.set(
+        const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        const key = `${month} · ${currencyGroupKey(d.currency)}`;
+        byMonthCurrency.set(
           key,
-          (byMonth.get(key) ?? 0) +
+          (byMonthCurrency.get(key) ?? 0) +
             (d.finalPrice ?? d.estimatedBudget ?? 0),
         );
       }
-      wonRevenue = [...byMonth.entries()]
+      wonRevenue = [...byMonthCurrency.entries()]
         .map(([label, value]) => ({ label, value }))
         .sort((a, b) => a.label.localeCompare(b.label));
+      wonRevenueByCurrency = groupTotalsByCurrency(
+        wonWithBudget,
+        (d) => d.currency,
+        (d) => d.finalPrice ?? d.estimatedBudget,
+      );
     }
 
     return jsonOk({
@@ -226,6 +238,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       dealsByStage,
       followUpsDueByDay: fuBuckets,
       wonRevenue,
+      wonRevenueByCurrency,
     });
   });
 }

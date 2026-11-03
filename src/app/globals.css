@@ -53,3 +53,22 @@
     }
   }
 }
+
+/* Quote print view (browser print only, no PDF service): when printing,
+   hide everything except the .quote-print section on the quote detail
+   page, so Print quote produces a clean quote sheet. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .quote-print,
+  .quote-print * {
+    visibility: visible;
+  }
+  .quote-print {
+    position: absolute;
+    inset: 0;
+    border: none !important;
+    box-shadow: none !important;
+  }
+}

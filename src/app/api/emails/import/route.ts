@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import {
   normalizeEmail,
   syncFollowUpForActivity,
+  maybeCreateAutoFollowUp,
   EMAIL_STATUSES,
   parseCsv,
 } from "@/app/api/emails/shared";
@@ -253,10 +254,12 @@ export async function POST(request: Request): Promise<NextResponse> {
         },
       });
       await syncFollowUpForActivity(activity);
+      const autoFollowUpCreated = await maybeCreateAutoFollowUp(activity, user.id);
       await writeAudit(user.id, "EMAIL_ACTIVITY_IMPORTED", "EmailActivity", activity.id, {
         recipientEmail,
         subject,
         status: statusCell,
+        autoFollowUpCreated,
       });
       imported += 1;
     }

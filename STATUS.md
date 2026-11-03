@@ -127,3 +127,32 @@ flow — deliberately absent, since this app sends no email).
   `npx next lint` CLEAN. Final `npm run build` is the parent's step
   (not run here, to avoid lock conflicts). No email-sending code or
   Gmail OAuth added.
+
+## CRM gap updates — DONE locally 2026-11-03 (NOT pushed, NOT deployed)
+Build re-verified by gap builder: `npm run build` PASSED,
+`npm run lint` CLEAN (0 warnings/errors). New code is local only —
+deployment (including `prisma db push` for the additive schema changes)
+is the parent's step. No emails sent, no sending code added.
+- International model: Company + Contact timezone/language/currency/
+  gdprConsentNote, Contact gdprConsent boolean default false; Zod,
+  forms, detail pages, companies list filters (country/currency/
+  language). Country untouched.
+- Multi-currency: deals totals + weighted value grouped by currency,
+  dashboard won chart by month+currency with per-currency totals;
+  empty currency = "Unspecified" group, never merged.
+- Saved views: /api/saved-views (mine only), control on Companies and
+  Deals lists; applying only filters, never widens grant scope.
+- Quotes: Quote + QuoteLineItem models, /api/quotes CRUD + lines,
+  /deals/quotes list + detail with browser-print view; total computed
+  server-side from line items; DEALS permission module; accepting a
+  quote does not move the deal stage.
+- Auto follow-up: FOLLOW_UP_REQUIRED with no followUpDate auto-creates
+  one PENDING FollowUp (assignee or acting user, +3 days, reason "Auto
+  follow-up from email"), deduped by FollowUp.autoForEmailId; wired
+  into status, PATCH, create, and import paths; Stale flag on deals
+  list view as well as board.
+- Stage rules: move route (+ deal PATCH) blocks PROPOSAL_SENT without
+  a budget and WON without a finalPrice, with a clear error; fixed
+  probability map in src/lib/deal-stages.ts shown on deal cards;
+  weighted pipeline value per currency on the deals page.
+- NOT built (stretch, next item): multiple pipelines.

@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import {
   activityInclude,
   syncFollowUpForActivity,
+  maybeCreateAutoFollowUp,
   ensureSuppressed,
   EMAIL_STATUSES,
 } from "@/app/api/emails/shared";
@@ -74,12 +75,14 @@ export async function POST(
       );
     }
     await syncFollowUpForActivity(updated);
+    const autoFollowUpCreated = await maybeCreateAutoFollowUp(updated, user.id);
     await writeAudit(user.id, "EMAIL_STATUS_CHANGED", "EmailActivity", updated.id, {
       fromStatus: existing.status,
       toStatus: updated.status,
       recipientEmail: updated.recipientEmail,
       notes: parsed.data.notes ?? undefined,
       replySummary: parsed.data.replySummary ?? undefined,
+      autoFollowUpCreated,
     });
     return jsonOk(updated);
   });

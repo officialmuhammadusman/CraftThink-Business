@@ -16,12 +16,23 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+// International fields (CRM gap update): free-text timezone/language,
+// ISO currency code, GDPR consent note. Country stays untouched.
+const timezoneField = z.string().trim().max(100).optional().nullable();
+const languageField = z.string().trim().max(100).optional().nullable();
+const currencyField = z.string().trim().max(10).optional().nullable();
+const gdprNoteField = z.string().trim().max(2000).optional().nullable();
+
 export const companySchema = z.object({
   name: z.string().trim().min(1, "Company name is required").max(255),
   website: optionalUrl,
   industry: z.string().trim().max(255).optional().nullable(),
   country: z.string().trim().max(255).optional().nullable(),
   city: z.string().trim().max(255).optional().nullable(),
+  timezone: timezoneField,
+  language: languageField,
+  currency: currencyField,
+  gdprConsentNote: gdprNoteField,
   size: z.string().trim().max(100).optional().nullable(),
   linkedinUrl: optionalUrl,
   description: optionalText,
@@ -43,6 +54,11 @@ export const contactSchema = z.object({
   phone: z.string().trim().max(100).optional().nullable(),
   isDecisionMaker: z.boolean().default(false),
   notes: optionalText,
+  timezone: timezoneField,
+  language: languageField,
+  currency: currencyField,
+  gdprConsentNote: gdprNoteField,
+  gdprConsent: z.boolean().default(false),
 });
 
 export const campaignSchema = z.object({
@@ -181,6 +197,31 @@ export const taskSchema = z.object({
   deadline: optionalDate,
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "DONE"]),
   progress: z.number().int().min(0).max(100).default(0),
+});
+
+export const savedViewSchema = z.object({
+  module: z.enum(["companies", "deals"]),
+  name: z.string().trim().min(1, "Name is required").max(100),
+  filters: z.record(z.string(), z.string()).default({}),
+});
+
+export const quoteStatusSchema = z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED"]);
+
+export const quoteLineItemSchema = z.object({
+  description: z.string().trim().min(1, "Description is required").max(500),
+  quantity: z.number().positive("Quantity must be greater than 0"),
+  unitPrice: z.number().nonnegative("Unit price cannot be negative"),
+  position: z.number().int().min(0).default(0),
+});
+
+export const quoteSchema = z.object({
+  dealId: z.string().min(1, "Deal is required").optional().nullable(),
+  companyId: z.string().min(1, "Company is required").optional().nullable(),
+  title: z.string().trim().min(1, "Title is required").max(255),
+  currency: z.string().trim().min(1).max(10).default("USD"),
+  status: quoteStatusSchema.default("DRAFT"),
+  notes: optionalText,
+  lineItems: z.array(quoteLineItemSchema).max(100).optional(),
 });
 
 export const taskCommentSchema = z.object({

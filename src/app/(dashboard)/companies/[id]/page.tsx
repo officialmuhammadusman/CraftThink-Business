@@ -16,6 +16,14 @@ import {
 import { FieldError, zodFieldErrors } from "@/components/ui/field-error";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { companySchema, contactSchema } from "@/lib/validation";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Detail = {
   id: string;
@@ -24,6 +32,10 @@ type Detail = {
   industry: string | null;
   country: string | null;
   city: string | null;
+  timezone: string | null;
+  language: string | null;
+  currency: string | null;
+  gdprConsentNote: string | null;
   size: string | null;
   linkedinUrl: string | null;
   description: string | null;
@@ -43,6 +55,11 @@ type Detail = {
     phone: string | null;
     isDecisionMaker: boolean;
     notes: string | null;
+    timezone: string | null;
+    language: string | null;
+    currency: string | null;
+    gdprConsentNote: string | null;
+    gdprConsent: boolean;
   }[];
   emailActivities: {
     id: string;
@@ -84,7 +101,7 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [edit, setEdit] = useState({ status: "", priority: "", city: "", country: "", industry: "", description: "" });
+  const [edit, setEdit] = useState({ status: "", priority: "", city: "", country: "", timezone: "", language: "", currency: "", gdprConsentNote: "", industry: "", description: "" });
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
   const [editBusy, setEditBusy] = useState(false);
   const [newTag, setNewTag] = useState("");
@@ -96,6 +113,11 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
     phone: "",
     isDecisionMaker: false,
     notes: "",
+    timezone: "",
+    language: "",
+    currency: "",
+    gdprConsentNote: "",
+    gdprConsent: false,
   });
   const [contactFieldErrors, setContactFieldErrors] = useState<Record<string, string>>({});
   const [contactBusy, setContactBusy] = useState(false);
@@ -115,6 +137,10 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
         priority: data.priority,
         city: data.city ?? "",
         country: data.country ?? "",
+        timezone: data.timezone ?? "",
+        language: data.language ?? "",
+        currency: data.currency ?? "",
+        gdprConsentNote: data.gdprConsentNote ?? "",
         industry: data.industry ?? "",
         description: data.description ?? "",
       });
@@ -143,6 +169,10 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
       priority: edit.priority,
       city: edit.city || null,
       country: edit.country || null,
+      timezone: edit.timezone || null,
+      language: edit.language || null,
+      currency: edit.currency || null,
+      gdprConsentNote: edit.gdprConsentNote || null,
       industry: edit.industry || null,
       description: edit.description || null,
     });
@@ -257,6 +287,11 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
         phone: "",
         isDecisionMaker: false,
         notes: "",
+        timezone: "",
+        language: "",
+        currency: "",
+        gdprConsentNote: "",
+        gdprConsent: false,
       });
       toast.success("Contact added.");
       load();
@@ -362,6 +397,36 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
             <FieldError message={editFieldErrors.country} />
           </Label>
           <Label className="text-base font-medium text-slate-700">
+            Timezone
+            <Input value={edit.timezone} onChange={(e) => setEdit({ ...edit, timezone: e.target.value })} placeholder="e.g. Asia/Karachi, Europe/London, America/New_York" className="mt-1" />
+            <FieldError message={editFieldErrors.timezone} />
+          </Label>
+          <Label className="text-base font-medium text-slate-700">
+            Language
+            <Input value={edit.language} onChange={(e) => setEdit({ ...edit, language: e.target.value })} placeholder="e.g. English, Spanish" className="mt-1" />
+            <FieldError message={editFieldErrors.language} />
+          </Label>
+          <Label className="text-base font-medium text-slate-700">
+            Currency
+            <Select value={edit.currency || "none"} onValueChange={(v) => setEdit({ ...edit, currency: v === "none" ? "" : v })}>
+              <SelectTrigger className="mt-1 min-h-12 text-base">
+                <SelectValue placeholder="Select currency…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No currency</SelectItem>
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError message={editFieldErrors.currency} />
+          </Label>
+          <Label className="text-base font-medium text-slate-700 sm:col-span-2">
+            GDPR consent note
+            <Textarea value={edit.gdprConsentNote} onChange={(e) => setEdit({ ...edit, gdprConsentNote: e.target.value })} rows={2} placeholder="How and when consent was given, if any" className="mt-1" />
+            <FieldError message={editFieldErrors.gdprConsentNote} />
+          </Label>
+          <Label className="text-base font-medium text-slate-700">
             Industry
             <Input value={edit.industry} onChange={(e) => setEdit({ ...edit, industry: e.target.value })} className="mt-1" />
             <FieldError message={editFieldErrors.industry} />
@@ -393,6 +458,10 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
               <div><dt className="text-slate-500">Website</dt><dd className="text-slate-900">{company.website ?? "—"}</dd></div>
               <div><dt className="text-slate-500">Industry</dt><dd className="text-slate-900">{company.industry ?? "—"}</dd></div>
               <div><dt className="text-slate-500">Location</dt><dd className="text-slate-900">{[company.city, company.country].filter(Boolean).join(", ") || "—"}</dd></div>
+              <div><dt className="text-slate-500">Timezone</dt><dd className="text-slate-900">{company.timezone ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">Language</dt><dd className="text-slate-900">{company.language ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">Currency</dt><dd className="text-slate-900">{company.currency ?? "—"}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-slate-500">GDPR consent note</dt><dd className="text-slate-900">{company.gdprConsentNote ?? "—"}</dd></div>
               <div><dt className="text-slate-500">Size</dt><dd className="text-slate-900">{company.size ?? "—"}</dd></div>
               <div><dt className="text-slate-500">LinkedIn</dt><dd className="text-slate-900">{company.linkedinUrl ?? "—"}</dd></div>
               <div><dt className="text-slate-500">Source</dt><dd className="text-slate-900">{company.source ?? "—"}</dd></div>
@@ -437,6 +506,11 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
                         {c.jobTitle ?? ""} · {c.email}
                         {c.phone ? ` · ${c.phone}` : ""}
                       </span>
+                      <span className="block text-sm text-slate-500">
+                        {[c.timezone, c.language, c.currency].filter(Boolean).join(" · ")}
+                        {c.gdprConsent ? " · GDPR consent: yes" : " · GDPR consent: no"}
+                        {c.gdprConsentNote ? ` · ${c.gdprConsentNote}` : ""}
+                      </span>
                       {c.notes && <span className="block text-sm text-slate-500">{c.notes}</span>}
                     </span>
                     <Button type="button" onClick={() => setConfirm({ kind: "contact", id: c.id, name: c.fullName })} className="text-base font-medium text-red-600 hover:underline">
@@ -472,6 +546,46 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
                 <Input value={contactForm.linkedinUrl} onChange={(e) => setContactForm({ ...contactForm, linkedinUrl: e.target.value })} className="mt-1" />
                 <FieldError message={contactFieldErrors.linkedinUrl} />
               </Label>
+              <Label className="text-base font-medium text-slate-700">
+                Timezone
+                <Input value={contactForm.timezone} onChange={(e) => setContactForm({ ...contactForm, timezone: e.target.value })} placeholder="e.g. Asia/Karachi, Europe/London, America/New_York" className="mt-1" />
+                <FieldError message={contactFieldErrors.timezone} />
+              </Label>
+              <Label className="text-base font-medium text-slate-700">
+                Language
+                <Input value={contactForm.language} onChange={(e) => setContactForm({ ...contactForm, language: e.target.value })} placeholder="e.g. English, Spanish" className="mt-1" />
+                <FieldError message={contactFieldErrors.language} />
+              </Label>
+              <Label className="text-base font-medium text-slate-700">
+                Currency
+                <Select value={contactForm.currency || "none"} onValueChange={(v) => setContactForm({ ...contactForm, currency: v === "none" ? "" : v })}>
+                  <SelectTrigger className="mt-1 min-h-12 text-base">
+                    <SelectValue placeholder="Select currency…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No currency</SelectItem>
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldError message={contactFieldErrors.currency} />
+              </Label>
+              <Label className="text-base font-medium text-slate-700 sm:col-span-2">
+                GDPR consent note
+                <Textarea value={contactForm.gdprConsentNote} onChange={(e) => setContactForm({ ...contactForm, gdprConsentNote: e.target.value })} rows={2} placeholder="How and when consent was given, if any" className="mt-1" />
+                <FieldError message={contactFieldErrors.gdprConsentNote} />
+              </Label>
+              <div className="flex items-center gap-2 text-base text-slate-700">
+                <Checkbox
+                  id="gdpr-consent"
+                  checked={contactForm.gdprConsent}
+                  onCheckedChange={(v) => setContactForm({ ...contactForm, gdprConsent: v === true })}
+                />
+                <Label htmlFor="gdpr-consent" className="text-base text-slate-700">
+                  GDPR consent given
+                </Label>
+              </div>
               <div className="flex items-center gap-2 text-base text-slate-700">
                 <Checkbox
                   id="decision-maker"

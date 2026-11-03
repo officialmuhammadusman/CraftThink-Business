@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { companySchema } from "@/lib/validation";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import SavedViewsControl from "@/components/SavedViewsControl";
 
 type Company = {
   id: string;
@@ -41,6 +43,10 @@ type Company = {
   industry: string | null;
   country: string | null;
   city: string | null;
+  timezone: string | null;
+  language: string | null;
+  currency: string | null;
+  gdprConsentNote: string | null;
   status: string;
   priority: string;
   assignedTo: { id: string; name: string } | null;
@@ -82,6 +88,8 @@ export default function CompaniesPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [country, setCountry] = useState("");
+  const [currency, setCurrency] = useState("");
+  const [language, setLanguage] = useState("");
   const [industry, setIndustry] = useState("");
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
@@ -105,6 +113,10 @@ export default function CompaniesPage() {
     industry: "",
     country: "",
     city: "",
+    timezone: "",
+    language: "",
+    currency: "",
+    gdprConsentNote: "",
     size: "",
     linkedinUrl: "",
     description: "",
@@ -121,6 +133,8 @@ export default function CompaniesPage() {
       const params = new URLSearchParams({ page: String(page), limit: "20" });
       if (search) params.set("search", search);
       if (country) params.set("country", country);
+      if (currency) params.set("currency", currency);
+      if (language) params.set("language", language);
       if (industry) params.set("industry", industry);
       if (status) params.set("status", status);
       if (priority) params.set("priority", priority);
@@ -138,7 +152,20 @@ export default function CompaniesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, country, industry, status, priority, contacted, tag]);
+  }, [page, search, country, currency, language, industry, status, priority, contacted, tag]);
+
+  function applySavedFilters(filters: Record<string, string>) {
+    setSearch(filters.search ?? "");
+    setCountry(filters.country ?? "");
+    setCurrency(filters.currency ?? "");
+    setLanguage(filters.language ?? "");
+    setIndustry(filters.industry ?? "");
+    setStatus(filters.status ?? "");
+    setPriority(filters.priority ?? "");
+    setContacted(filters.contacted ?? "");
+    setTag(filters.tag ?? "");
+    setPage(1);
+  }
 
   useEffect(() => {
     load();
@@ -205,6 +232,10 @@ export default function CompaniesPage() {
         industry: "",
         country: "",
         city: "",
+        timezone: "",
+        language: "",
+        currency: "",
+        gdprConsentNote: "",
         size: "",
         linkedinUrl: "",
         description: "",
@@ -281,6 +312,8 @@ export default function CompaniesPage() {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (country) params.set("country", country);
+    if (currency) params.set("currency", currency);
+    if (language) params.set("language", language);
     if (industry) params.set("industry", industry);
     if (status) params.set("status", status);
     if (priority) params.set("priority", priority);
@@ -302,6 +335,18 @@ export default function CompaniesPage() {
         className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base"
       />
       <Input value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }} placeholder="Country" className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base" />
+      <Select value={currency || "all"} onValueChange={(v) => { setCurrency(v === "all" ? "" : v); setPage(1); }}>
+        <SelectTrigger className="min-h-12 text-base">
+          <SelectValue placeholder="Any currency" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Any currency</SelectItem>
+          {SUPPORTED_CURRENCIES.map((c) => (
+            <SelectItem key={c} value={c}>{c}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input value={language} onChange={(e) => { setLanguage(e.target.value); setPage(1); }} placeholder="Language" className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base" />
       <Input value={industry} onChange={(e) => { setIndustry(e.target.value); setPage(1); }} placeholder="Industry" className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base" />
       <Input value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} placeholder="Status" className="min-h-12 rounded-md border border-slate-300 bg-white px-3 py-3 text-base" />
       <Select value={priority || "all"} onValueChange={(v) => { setPriority(v === "all" ? "" : v); setPage(1); }}>
@@ -367,7 +412,9 @@ export default function CompaniesPage() {
       render: (c) => (
         <>
           {[c.city, c.country].filter(Boolean).join(", ") || "—"}
-          <span className="block text-sm text-slate-500">{c.industry ?? ""}</span>
+          <span className="block text-sm text-slate-500">
+            {[c.industry, c.currency, c.language, c.timezone].filter(Boolean).join(" · ")}
+          </span>
         </>
       ),
     },
@@ -493,6 +540,36 @@ export default function CompaniesPage() {
               <FieldError message={fieldErrors.city} />
             </Label>
             <Label className="text-base font-medium text-slate-700">
+              Timezone
+              <Input value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="e.g. Asia/Karachi, Europe/London, America/New_York" className="mt-1" />
+              <FieldError message={fieldErrors.timezone} />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
+              Language
+              <Input value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} placeholder="e.g. English, Spanish" className="mt-1" />
+              <FieldError message={fieldErrors.language} />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
+              Currency
+              <Select value={form.currency || "none"} onValueChange={(v) => setForm({ ...form, currency: v === "none" ? "" : v })}>
+                <SelectTrigger className="mt-1 min-h-12 text-base">
+                  <SelectValue placeholder="Select currency…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No currency</SelectItem>
+                  {SUPPORTED_CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldError message={fieldErrors.currency} />
+            </Label>
+            <Label className="text-base font-medium text-slate-700 sm:col-span-2">
+              GDPR consent note
+              <Textarea value={form.gdprConsentNote} onChange={(e) => setForm({ ...form, gdprConsentNote: e.target.value })} rows={2} placeholder="How and when consent was given, if any" className="mt-1" />
+              <FieldError message={fieldErrors.gdprConsentNote} />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Size
               <Input value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} placeholder="e.g. 11-50" className="mt-1" />
               <FieldError message={fieldErrors.size} />
@@ -584,6 +661,24 @@ export default function CompaniesPage() {
         </div>
         {importResult && <p className="mt-2 text-base text-slate-700">{importResult}</p>}
       </form>
+
+      <div className="mt-4">
+        <SavedViewsControl
+          module="companies"
+          currentFilters={{
+            ...(search ? { search } : {}),
+            ...(country ? { country } : {}),
+            ...(currency ? { currency } : {}),
+            ...(language ? { language } : {}),
+            ...(industry ? { industry } : {}),
+            ...(status ? { status } : {}),
+            ...(priority ? { priority } : {}),
+            ...(contacted ? { contacted } : {}),
+            ...(tag ? { tag } : {}),
+          }}
+          onApply={applySavedFilters}
+        />
+      </div>
 
       <div className="mt-4 hidden flex-wrap gap-2 md:flex">
         {filterControls}

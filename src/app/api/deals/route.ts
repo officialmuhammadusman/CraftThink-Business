@@ -30,12 +30,14 @@ export async function GET(request: Request): Promise<NextResponse> {
     const { page, limit, skip } = parsePagination(request);
     const status = (params.get("status") ?? "").trim();
     const companyId = (params.get("companyId") ?? "").trim();
+    const currency = (params.get("currency") ?? "").trim();
     const assignedTo = (params.get("assignedTo") ?? "").trim();
     const search = (params.get("search") ?? "").trim();
 
     const and: Record<string, unknown>[] = [dealScopeForLevel(user, level)];
     if (status) and.push({ status });
     if (companyId) and.push({ companyId });
+    if (currency) and.push({ currency: { equals: currency, mode: "insensitive" } });
     if (assignedTo) and.push({ assignedToId: assignedTo });
     if (search) and.push({ title: { contains: search, mode: "insensitive" } });
     const where = { AND: and };

@@ -14,6 +14,7 @@ import {
 import { canEditLinked, dealScopeForLevel, pickPresent } from "../../companies/_scope";
 import type { PermLevel } from "@/lib/rbac";
 import { DEAL_INCLUDE } from "../_include";
+import { stageExitError } from "@/lib/deal-stages";
 
 const patchSchema = dealSchema.omit({ companyId: true }).partial();
 
@@ -79,6 +80,21 @@ export async function PATCH(
         : (item.notes ?? "");
     if (nextStatus === "LOST" && !nextNotes.trim()) {
       return jsonError("A lost deal requires a reason note", 422);
+    }
+    // Same stage exit checks as the move route, against the figures
+    // that will result from this PATCH (PATCH-supplied values win).
+    if (nextStatus !== item.status) {
+      const exitError = stageExitError(nextStatus, {
+        estimatedBudget:
+          "estimatedBudget" in data
+            ? ((data.estimatedBudget as number | null) ?? null)
+            : item.estimatedBudget,
+        finalPrice:
+          "finalPrice" in data
+            ? ((data.finalPrice as number | null) ?? null)
+            : item.finalPrice,
+      });
+      if (exitError) return jsonError(exitError, 422);
     }
     // Reopening a Won/Lost deal requires full deal access.
     if (

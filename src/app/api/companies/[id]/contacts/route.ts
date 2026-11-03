@@ -100,6 +100,11 @@ export async function POST(
           phone: data.phone?.trim() || null,
           isDecisionMaker: data.isDecisionMaker ?? false,
           notes: data.notes?.trim() || null,
+          timezone: data.timezone?.trim() || null,
+          language: data.language?.trim() || null,
+          currency: data.currency?.trim() || null,
+          gdprConsentNote: data.gdprConsentNote?.trim() || null,
+          gdprConsent: data.gdprConsent ?? false,
         },
       });
       await writeAudit(user.id, "CONTACT_CREATED", "Contact", contact.id, {

@@ -17,6 +17,7 @@ import {
   paginationMeta,
   activityInclude,
   syncFollowUpForActivity,
+  maybeCreateAutoFollowUp,
   endOfToday,
   FOLLOW_UP_DUE_EXCLUDED,
 } from "@/app/api/emails/shared";
@@ -260,10 +261,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
 
     await syncFollowUpForActivity(activity);
+    const autoFollowUpCreated = await maybeCreateAutoFollowUp(activity, user.id);
     await writeAudit(user.id, "EMAIL_ACTIVITY_CREATED", "EmailActivity", activity.id, {
       recipientEmail: activity.recipientEmail,
       subject: activity.subject,
       status: activity.status,
+      autoFollowUpCreated,
     });
     return jsonOk(activity, 201);
   });

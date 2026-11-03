@@ -15,6 +15,7 @@ const NAV = [
   { label: "Follow-ups", href: "/follow-ups" },
   { label: "Meetings", href: "/meetings" },
   { label: "Deals", href: "/deals" },
+  { label: "Quotes", href: "/deals/quotes" },
   { label: "Projects", href: "/projects" },
   { label: "Tasks", href: "/tasks" },
   { label: "Activity Log", href: "/activity-log" },

@@ -116,6 +116,7 @@ type Charts = {
   dealsByStage: { label: string; value: number }[];
   followUpsDueByDay: { label: string; value: number }[];
   wonRevenue: { label: string; value: number }[] | null;
+  wonRevenueByCurrency?: { currency: string; value: number }[] | null;
 };
 
 type StatusFilter = "ALL" | "CONTACTED" | "NOT_CONTACTED" | "REPLIED" | "INTERESTED";
@@ -468,12 +469,16 @@ export default function DashboardPage() {
                   <CardTitle>Won deal value by month</CardTitle>
                   <CardDescription>
                     Final price (or estimated budget) for won deals, by
-                    expected close month. Shown only because won deals with
-                    budget figures exist.
+                    expected close month and currency — currencies are
+                    never mixed in one total. Shown only because won deals
+                    with budget figures exist.
+                    {charts.wonRevenueByCurrency
+                      ? ` Totals: ${charts.wonRevenueByCurrency.map((t) => `${t.currency} ${t.value.toLocaleString()}`).join(" · ")}.`
+                      : ""}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <BarCountChart data={charts.wonRevenue} label="Value (USD)" />
+                  <BarCountChart data={charts.wonRevenue} label="Value" />
                 </CardContent>
               </Card>
             ) : null}

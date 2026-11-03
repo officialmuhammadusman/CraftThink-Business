@@ -127,6 +127,8 @@ model User {
   updatedAt    DateTime @updatedAt
 
   companiesAssigned  Company[]      @relation("CompanyAssignee")
+  savedViews         SavedView[]
+  quotesCreated      Quote[]        @relation("QuoteCreator")
   campaignsOwned     Campaign[]     @relation("CampaignOwner")
   emailAssigned      EmailActivity[] @relation("EmailAssignee")
   followUpsAssigned  FollowUp[]     @relation("FollowUpAssignee")
@@ -158,6 +160,12 @@ model Company {
   // Free-text source (e.g. "LinkedIn", "Referral", "Website"). Kept as a
   // string rather than an enum so new sources never need a migration.
   source        String?
+  // International model (CRM gap update): free-text timezone/language,
+  // ISO currency code, and a GDPR consent note. Country stays untouched.
+  timezone        String?
+  language        String?
+  currency        String?
+  gdprConsentNote String?
   // Pipeline status as free text (e.g. NEW, CONTACTED, QUALIFIED, CLIENT).
   // DealStatus on Deal is the authoritative deal-stage enum.
   status        String   @default("NEW")
@@ -172,6 +180,7 @@ model Company {
   followUps      FollowUp[]
   meetings       Meeting[]
   deals          Deal[]
+  quotes         Quote[]
   projects       Project[]
   tags           Tag[]
 
@@ -192,6 +201,13 @@ model Contact {
   phone           String?
   isDecisionMaker Boolean  @default(false)
   notes           String?
+  // International model (CRM gap update): same fields as Company, plus
+  // a boolean GDPR consent flag (default false — never assume consent).
+  timezone        String?
+  language        String?
+  currency        String?
+  gdprConsentNote String?
+  gdprConsent     Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -288,6 +304,10 @@ model FollowUp {
   status       FollowUpStatus @default(PENDING)
   assignedToId String?
   assignedTo   User?          @relation("FollowUpAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  // Set only on auto-created follow-ups (see src/app/api/emails/shared.ts):
+  // the EmailActivity id this row was auto-created for. Checked before
+  // creating, so re-saving the same email never duplicates the row.
+  autoForEmailId String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -295,6 +315,7 @@ model FollowUp {
   @@index([dueDate])
   @@index([status])
   @@index([assignedToId])
+  @@index([autoForEmailId])
 }
 
 model Meeting {
@@ -343,6 +364,7 @@ model Deal {
   updatedAt         DateTime   @updatedAt
 
   projects Project[]
+  quotes   Quote[]
 
   @@index([companyId])
   @@index([status])
@@ -428,6 +450,65 @@ model ActivityLog {
   @@index([actorId])
   @@index([entityType])
   @@index([createdAt])
+}
+
+// A user's own saved filter sets for the Companies / Deals lists.
+// Filters are a JSON object of query-param values. Applying a view only
+// ever filters a list query — it never widens PermissionGrant scope,
+// because list routes AND the grant scope with the view's filters.
+model SavedView {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module    String
+  name      String
+  filters   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, module])
+}
+
+// A quote belongs to a deal. dealId is SetNull on deal delete (same as
+// Project.dealId), so a quote survives its deal; companyId is denormalised
+// from the deal's company at creation so quotes stay listable per company.
+// There is deliberately NO hand-typed total: total = sum(quantity ×
+// unitPrice) over line items, computed server-side on every read/write.
+// Permission module is DEALS (quotes belong to deals) — see README.
+model Quote {
+  id          String   @id @default(cuid())
+  dealId      String?
+  deal        Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title       String
+  currency    String   @default("USD")
+  status      String   @default("DRAFT")
+  notes       String?
+  createdById String?
+  createdBy   User?    @relation("QuoteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lineItems QuoteLineItem[]
+
+  @@index([dealId])
+  @@index([companyId])
+  @@index([createdById])
+}
+
+model QuoteLineItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  unitPrice   Float
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([quoteId, position])
 }
 
 model Suppression {

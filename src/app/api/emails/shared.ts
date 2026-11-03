@@ -243,11 +243,75 @@ export function parseCsv(text: string): string[][] {
   return rows.filter((r) => !(r.length === 1 && r[0].trim() === ""));
 }
 
+export const AUTO_FOLLOW_UP_REASON = "Auto follow-up from email";
+
+/**
+ * Simple internal automation (no external service, no email sending).
+ *
+ * Rule: when an email activity's status is set to FOLLOW_UP_REQUIRED
+ * through any API path that changes email status AND the email has no
+ * followUpDate, automatically create one PENDING FollowUp for the
+ * email's assigned employee (falling back to the acting user), dated
+ * 3 days after the status change, reason "Auto follow-up from email",
+ * notes referencing the email subject.
+ *
+ * De-duplication: only creates when no FollowUp already exists with
+ * autoForEmailId = this email's id, so re-saves never duplicate.
+ * Returns true when a row was created. Callers audit-log the email
+ * change; they may also note `autoFollowUpCreated` in that entry.
+ * Note: this row's reason deliberately differs from the
+ * `Follow-up for tracked email <id>` prefix used by
+ * syncFollowUpForActivity, so the two mechanisms never clobber each
+ * other (sync only touches prefix rows, and only when a followUpDate
+ * exists — which is exactly when this automation does NOT run).
+ */
+export async function maybeCreateAutoFollowUp(
+  activity: Pick<
+    EmailActivity,
+    | "id"
+    | "companyId"
+    | "contactId"
+    | "subject"
+    | "status"
+    | "followUpDate"
+    | "assignedToId"
+  >,
+  actingUserId: string,
+): Promise<boolean> {
+  if (activity.status !== "FOLLOW_UP_REQUIRED") return false;
+  if (activity.followUpDate) return false;
+  const existing = await prisma.followUp.findFirst({
+    where: { autoForEmailId: activity.id },
+    select: { id: true },
+  });
+  if (existing) return false;
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 3);
+  await prisma.followUp.create({
+    data: {
+      companyId: activity.companyId,
+      contactId: activity.contactId ?? undefined,
+      dueDate,
+      reason: AUTO_FOLLOW_UP_REASON,
+      notes: `Auto-created because the email "${activity.subject}" was marked Follow-up required.`,
+      status: "PENDING",
+      assignedToId: activity.assignedToId ?? actingUserId,
+      autoForEmailId: activity.id,
+    },
+  });
+  return true;
+}
+
 /** Delete pending/overdue follow-up rows linked to a deleted activity. */
 export async function deleteLinkedFollowUps(activityId: string): Promise<void> {
   const prefix = `Follow-up for tracked email ${activityId}`;
   const rows = await prisma.followUp.findMany({
-    where: { reason: { startsWith: prefix }, status: { not: "DONE" } },
+    where: {
+      OR: [
+        { reason: { startsWith: prefix }, status: { not: "DONE" } },
+        { autoForEmailId: activityId, status: { not: "DONE" } },
+      ],
+    },
   });
   if (rows.length > 0) {
     await prisma.followUp.deleteMany({

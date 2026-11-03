@@ -41,6 +41,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const { page, limit, skip } = parsePagination(request);
     const search = (params.get("search") ?? "").trim();
     const country = (params.get("country") ?? "").trim();
+    const currency = (params.get("currency") ?? "").trim();
+    const language = (params.get("language") ?? "").trim();
     const industry = (params.get("industry") ?? "").trim();
     const status = (params.get("status") ?? "").trim();
     const priority = (params.get("priority") ?? "").trim();
@@ -60,6 +62,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       });
     }
     if (country) and.push({ country: { equals: country, mode: "insensitive" } });
+    if (currency) and.push({ currency: { equals: currency, mode: "insensitive" } });
+    if (language) and.push({ language: { equals: language, mode: "insensitive" } });
     if (industry)
       and.push({ industry: { equals: industry, mode: "insensitive" } });
     if (status) and.push({ status: { equals: status, mode: "insensitive" } });
@@ -128,6 +132,10 @@ export async function POST(request: Request): Promise<NextResponse> {
           industry: data.industry?.trim() || null,
           country: data.country?.trim() || null,
           city: data.city?.trim() || null,
+          timezone: data.timezone?.trim() || null,
+          language: data.language?.trim() || null,
+          currency: data.currency?.trim() || null,
+          gdprConsentNote: data.gdprConsentNote?.trim() || null,
           size: data.size?.trim() || null,
           linkedinUrl: data.linkedinUrl?.trim() || null,
           description: data.description?.trim() || null,

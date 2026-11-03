@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import {
   activityInclude,
   syncFollowUpForActivity,
+  maybeCreateAutoFollowUp,
   ensureSuppressed,
   deleteLinkedFollowUps,
 } from "@/app/api/emails/shared";
@@ -50,7 +51,12 @@ export async function GET(
 
     const prefix = `Follow-up for tracked email ${activity.id}`;
     const followUps = await prisma.followUp.findMany({
-      where: { reason: { startsWith: prefix } },
+      where: {
+        OR: [
+          { reason: { startsWith: prefix } },
+          { autoForEmailId: activity.id },
+        ],
+      },
       orderBy: { dueDate: "asc" },
       include: {
         assignedTo: { select: { id: true, name: true, email: true } },
@@ -174,10 +180,12 @@ export async function PATCH(
       await ensureSuppressed(updated.recipientEmail, "Unsubscribed via email status update");
     }
     await syncFollowUpForActivity(updated);
+    const autoFollowUpCreated = await maybeCreateAutoFollowUp(updated, user.id);
     await writeAudit(user.id, "EMAIL_ACTIVITY_UPDATED", "EmailActivity", updated.id, {
       recipientEmail: updated.recipientEmail,
       subject: updated.subject,
       status: updated.status,
+      autoFollowUpCreated,
     });
     return jsonOk(updated);
   });

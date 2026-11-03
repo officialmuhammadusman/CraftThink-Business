@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { canEditLinked, dealScopeForLevel } from "../../../companies/_scope";
 import { DEAL_INCLUDE } from "../../_include";
+import { stageExitError } from "@/lib/deal-stages";
 
 const moveSchema = z.object({
   status: z.enum([
@@ -87,6 +88,11 @@ export async function POST(
         422,
       );
     }
+    // Stage exit checks (see src/lib/deal-stages.ts): PROPOSAL_SENT
+    // needs a budget, WON needs a final price. Checked against the
+    // deal's current figures — the move endpoint carries no budget.
+    const exitError = stageExitError(status, item);
+    if (exitError) return jsonError(exitError, 422);
     const updated = await prisma.deal.update({
       where: { id: item.id },
       data: {
