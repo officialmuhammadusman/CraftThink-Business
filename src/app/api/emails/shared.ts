@@ -31,21 +31,23 @@ export const FOLLOW_UP_DUE_EXCLUDED = [
   "BOUNCED",
 ] as const;
 
+// NEW MODEL: "admin" now means Super Admin only. A legacy ADMIN role
+// grants nothing by itself; module access comes from PermissionGrant
+// rows (see @/lib/rbac). Routes gate on moduleAccess(), not this.
 export function isAdmin(user: SessionUser): boolean {
-  return user.role === "SUPER_ADMIN" || user.role === "ADMIN";
+  return user.role === "SUPER_ADMIN";
 }
 
 export function isSuperAdmin(user: SessionUser): boolean {
   return user.role === "SUPER_ADMIN";
 }
 
-/** Roles allowed to create/edit email tracking records and campaigns. */
+/**
+ * @deprecated Role-based outreach gate. Routes now gate on the grant
+ * level for the route's module (ASSIGNED = own records, ALL = any).
+ */
 export function canManageOutreach(user: SessionUser): boolean {
-  return (
-    user.role === "SUPER_ADMIN" ||
-    user.role === "ADMIN" ||
-    user.role === "SALES_EXECUTIVE"
-  );
+  return user.role === "SUPER_ADMIN";
 }
 
 export function normalizeEmail(email: string): string {

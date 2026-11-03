@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Prisma, EmailStatus } from "@prisma/client";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess, getPermission } from "@/lib/rbac";
 import {
   handleRoute,
   jsonError,
@@ -15,8 +15,6 @@ import { prisma } from "@/lib/prisma";
 import {
   parsePagination,
   paginationMeta,
-  isAdmin,
-  canManageOutreach,
   activityInclude,
   syncFollowUpForActivity,
   endOfToday,
@@ -34,15 +32,17 @@ const SENT_LIKE = [
 
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const { page, limit } = parsePagination(params);
-    const admin = isAdmin(user);
+    const admin = level === "ALL";
 
     const where: Prisma.EmailActivityWhereInput = {};
-    // Non-admin roles see only records assigned to them.
-    if (!admin) where.assignedToId = user.id;
+    // ASSIGNED sees only email records assigned to them.
+    if (level === "ASSIGNED") where.assignedToId = user.id;
 
     const search = params.get("search")?.trim();
     if (search) {
@@ -160,22 +160,38 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const parsed = await parseBody(request, emailActivitySchema);
     if ("error" in parsed) return parsed.error;
     const data = parsed.data;
-    const admin = isAdmin(user);
+    const admin = level === "ALL";
 
-    const company = await prisma.company.findUnique({
-      where: { id: data.companyId },
+    // Cross-module visibility: the company must be visible under the
+    // caller's COMPANIES grant (ASSIGNED = in assigned scope, ALL = any,
+    // NONE = no company reference allowed).
+    const companiesLevel = await getPermission(user.id, "COMPANIES");
+    if (companiesLevel === "NONE") return forbidden("You have no company access");
+    const company = await prisma.company.findFirst({
+      where: {
+        id: data.companyId,
+        ...(companiesLevel === "ASSIGNED"
+          ? {
+              OR: [
+                { assignedToId: user.id },
+                { projects: { some: { managerId: user.id } } },
+                { projects: { some: { developers: { some: { id: user.id } } } } },
+                { projects: { some: { tasks: { some: { assignedToId: user.id } } } } },
+                { meetings: { some: { assignedToId: user.id } } },
+              ],
+            }
+          : {}),
+      },
       select: { id: true, assignedToId: true },
     });
-    if (!company) return jsonError("Company not found", 422);
-    if (!admin && company.assignedToId !== user.id) {
-      return forbidden("Company is not assigned to you");
-    }
+    if (!company) return forbidden("Company is not visible to you");
     if (data.contactId) {
       const contact = await prisma.contact.findUnique({
         where: { id: data.contactId },
@@ -186,14 +202,16 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
     }
     if (data.campaignId) {
-      const campaign = await prisma.campaign.findUnique({
-        where: { id: data.campaignId },
+      const campaignsLevel = await getPermission(user.id, "CAMPAIGNS");
+      if (campaignsLevel === "NONE") return forbidden("You have no campaign access");
+      const campaign = await prisma.campaign.findFirst({
+        where: {
+          id: data.campaignId,
+          ...(campaignsLevel === "ASSIGNED" ? { ownerId: user.id } : {}),
+        },
         select: { id: true, ownerId: true },
       });
-      if (!campaign) return jsonError("Campaign not found", 422);
-      if (!admin && campaign.ownerId !== user.id) {
-        return forbidden("Campaign is not yours");
-      }
+      if (!campaign) return forbidden("Campaign is not visible to you");
     }
     if (data.templateId) {
       const template = await prisma.emailTemplate.findUnique({
@@ -202,8 +220,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
       if (!template) return jsonError("Template not found", 422);
     }
-    // Non-admin creators record the activity against themselves so it
-    // stays inside their scoped view.
+    // ASSIGNED creators record the activity against themselves so it
+    // stays inside their scoped view; ALL may assign to anyone.
+    if (level === "ASSIGNED" && data.assignedToId && data.assignedToId !== user.id) {
+      return forbidden("You may only assign email records to yourself");
+    }
     let assignedToId: string | null = admin ? (data.assignedToId ?? null) : user.id;
     if (assignedToId) {
       const assignee = await prisma.user.findUnique({

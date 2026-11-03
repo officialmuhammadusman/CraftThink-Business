@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
@@ -11,7 +11,8 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api";
-import { canEditLead, companyScope, isPrivileged } from "../../_scope";
+import { companyScopeForLevel } from "../../_scope";
+import type { PermLevel } from "@/lib/rbac";
 
 const assignSchema = z.object({ name: z.string().trim().min(1).max(100) });
 const removeSchema = z.object({
@@ -19,11 +20,17 @@ const removeSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
 });
 
-async function visibleCompany(user: { id: string; role: string }, companyId: string) {
-  return prisma.company.findFirst({
-    where: { id: companyId, AND: [companyScope(user as never) as never] },
+async function visibleCompany(user: { id: string }, companyId: string, level: PermLevel) {
+  const company = await prisma.company.findFirst({
+    where: { id: companyId, AND: [companyScopeForLevel(user as never, level) as never] },
     select: { id: true, name: true, assignedToId: true },
   });
+  if (company) return company;
+  const exists = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { id: true },
+  });
+  return exists ? ("forbidden" as const) : null;
 }
 
 export async function GET(
@@ -31,9 +38,12 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const company = await visibleCompany(user, params.id);
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const company = await visibleCompany(user, params.id, level);
+    if (company === "forbidden") return forbidden();
     if (!company) return notFound("Company not found");
     const tags = await prisma.tag.findMany({
       where: { companies: { some: { id: company.id } } },
@@ -49,12 +59,13 @@ export async function POST(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const company = await visibleCompany(user, params.id);
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const company = await visibleCompany(user, params.id, level);
+    if (company === "forbidden") return forbidden("You cannot tag this company");
     if (!company) return notFound("Company not found");
-    if (!canEditLead(user, company))
-      return forbidden("You cannot tag this company");
     let body: unknown;
     try {
       body = await request.json();
@@ -94,12 +105,13 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const company = await visibleCompany(user, params.id);
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const company = await visibleCompany(user, params.id, level);
+    if (company === "forbidden") return forbidden("You cannot remove tags from this company");
     if (!company) return notFound("Company not found");
-    if (!canEditLead(user, company) && !isPrivileged(user))
-      return forbidden("You cannot remove tags from this company");
     let body: unknown;
     try {
       body = await request.json();

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import {
   handleRoute,
   jsonOk,
@@ -12,8 +12,6 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
-  isAdmin,
-  canManageOutreach,
   activityInclude,
   syncFollowUpForActivity,
   ensureSuppressed,
@@ -41,12 +39,13 @@ export async function POST(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const parsed = await parseBody(request, statusUpdateSchema);
     if ("error" in parsed) return parsed.error;
-    const admin = isAdmin(user);
+    const admin = level === "ALL";
 
     const existing = await prisma.emailActivity.findUnique({
       where: { id: params.id },

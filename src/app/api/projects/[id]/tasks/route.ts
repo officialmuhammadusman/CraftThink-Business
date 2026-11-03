@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { taskSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -12,12 +12,10 @@ import {
   unauthorized,
 } from "@/lib/api";
 import {
-  canManageProject,
-  isPrivileged,
   paginationMeta,
   parsePagination,
-  projectScope,
-  taskScope,
+  projectScopeForLevel,
+  taskScopeForLevel,
 } from "../../../companies/_scope";
 import { TASK_INCLUDE } from "../../../_includes";
 
@@ -26,26 +24,37 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("PROJECTS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    // Task listing also needs TASKS access; the project itself needs
+    // PROJECTS access (checked by the gate above).
+    const tasksAccess = await moduleAccess("TASKS");
+    if (!tasksAccess.ok) return tasksAccess.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const tasksLevel = tasksAccess.level;
     const project = await prisma.project.findFirst({
-      where: { id: params.id, AND: [projectScope(user as never) as never] },
+      where: { id: params.id, AND: [projectScopeForLevel(user, level) as never] },
       select: { id: true },
     });
-    if (!project) return notFound("Project not found");
+    if (!project) {
+      const exists = await prisma.project.findUnique({ where: { id: params.id }, select: { id: true } });
+      if (exists) return forbidden();
+      return notFound("Project not found");
+    }
     const { page, limit, skip } = parsePagination(request);
     const status = new URL(request.url).searchParams.get("status") ?? "";
     const where = { projectId: project.id, ...(status ? { status } : {}) };
     const [items, total] = await Promise.all([
       prisma.task.findMany({
-        where: { ...where, AND: [taskScope(user as never) as never] } as never,
+        where: { ...where, AND: [taskScopeForLevel(user, tasksLevel) as never] } as never,
         include: TASK_INCLUDE,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
       }),
       prisma.task.count({
-        where: { ...where, AND: [taskScope(user as never) as never] } as never,
+        where: { ...where, AND: [taskScopeForLevel(user, tasksLevel) as never] } as never,
       }),
     ]);
     return jsonOk({ items, pagination: paginationMeta(total, page, limit) });
@@ -57,22 +66,31 @@ export async function POST(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("PROJECTS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const tasksAccess = await moduleAccess("TASKS");
+    if (!tasksAccess.ok) return tasksAccess.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const tasksLevel = tasksAccess.level;
     const project = await prisma.project.findFirst({
-      where: { id: params.id, AND: [projectScope(user as never) as never] },
+      where: { id: params.id, AND: [projectScopeForLevel(user, level) as never] },
       include: {
         manager: { select: { id: true } },
         developers: { select: { id: true } },
       },
     });
-    if (!project) return notFound("Project not found");
+    if (!project) {
+      const exists = await prisma.project.findUnique({ where: { id: params.id }, select: { id: true } });
+      if (exists) return forbidden();
+      return notFound("Project not found");
+    }
     const mayCreate =
-      isPrivileged(user) ||
+      tasksLevel === "ALL" ||
       project.manager?.id === user.id ||
       project.developers.some((d) => d.id === user.id);
     if (!mayCreate)
-      return forbidden("Only admins, the project manager or project developers create tasks");
+      return forbidden("Only the project manager or project developers create tasks");
     const parsed = await parseBody(request, taskSchema);
     if ("error" in parsed) return parsed.error;
     const data = parsed.data;

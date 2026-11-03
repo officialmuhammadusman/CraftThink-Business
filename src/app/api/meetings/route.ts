@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess, getPermission } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { meetingSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -12,9 +12,8 @@ import {
   unauthorized,
 } from "@/lib/api";
 import {
-  companyScope,
-  isPrivileged,
-  meetingScope,
+  companyScopeForLevel,
+  meetingScopeForLevel,
   paginationMeta,
   parsePagination,
 } from "../companies/_scope";
@@ -27,8 +26,10 @@ const INCLUDE = {
 
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("MEETINGS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const { page, limit, skip } = parsePagination(request);
     const status = (params.get("status") ?? "").trim();
@@ -37,7 +38,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const from = params.get("from") ?? "";
     const to = params.get("to") ?? "";
 
-    const and: Record<string, unknown>[] = [meetingScope(user)];
+    const and: Record<string, unknown>[] = [meetingScopeForLevel(user, level)];
     if (status) and.push({ status });
     if (companyId) and.push({ companyId });
     if (assignedTo) and.push({ assignedToId: assignedTo });
@@ -64,30 +65,31 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (
-      user.role !== "SUPER_ADMIN" &&
-      user.role !== "ADMIN" &&
-      user.role !== "SALES_EXECUTIVE" &&
-      user.role !== "PROJECT_MANAGER"
-    ) {
-      return forbidden("Only sales, project managers and admins create meetings");
-    }
+    const access = await moduleAccess("MEETINGS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const parsed = await parseBody(request, meetingSchema);
     if ("error" in parsed) return parsed.error;
     const data = parsed.data;
+    const companiesLevel = await getPermission(user.id, "COMPANIES");
+    if (companiesLevel === "NONE") return forbidden("You have no company access");
     const company = await prisma.company.findFirst({
-      where: { id: data.companyId, AND: [companyScope(user) as never] },
+      where: { id: data.companyId, AND: [companyScopeForLevel(user, companiesLevel) as never] },
       select: { id: true, name: true, assignedToId: true },
     });
-    if (!company) return notFound("Company not found");
+    if (!company) return forbidden("Company is not visible to you");
     if (
-      !isPrivileged(user) &&
+      level === "ASSIGNED" &&
       company.assignedToId !== user.id &&
       data.assignedToId !== user.id
     ) {
       return forbidden("You cannot create meetings for this company");
+    }
+    if (level === "ASSIGNED" && data.assignedToId && data.assignedToId !== user.id && company.assignedToId === user.id) {
+      // Meeting assigned to someone else for a company assigned to the
+      // caller is allowed only with full access; ASSIGNED keeps it own.
+      return forbidden("You may only create meetings assigned to yourself");
     }
     if (data.contactId) {
       const contact = await prisma.contact.findFirst({

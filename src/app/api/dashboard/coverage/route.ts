@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import { handleRoute, jsonOk, unauthorized } from "@/lib/api";
+import { moduleAccess, getPermission } from "@/lib/rbac";
+import { companyScopeForLevel } from "../../companies/_scope";
+import { handleRoute, jsonOk, unauthorized, forbidden } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 // Reply statuses: a business counts as "replied" when any of its email
@@ -34,8 +36,17 @@ export async function GET(): Promise<NextResponse> {
   return handleRoute(async () => {
     const user = await getSessionUser();
     if (!user) return unauthorized();
+    // Coverage is company-centric: it needs COMPANIES access, and its
+    // rows are scoped to the caller's companies. Email / follow-up
+    // details are hidden when those modules are NONE.
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const companiesLevel = access.level;
+    const emailsLevel = await getPermission(user.id, "EMAILS");
+    const followUpsLevel = await getPermission(user.id, "FOLLOW_UPS");
 
     const companies = await prisma.company.findMany({
+      where: companyScopeForLevel(user, companiesLevel) as never,
       orderBy: { name: "asc" },
       include: {
         emailActivities: {
@@ -58,9 +69,11 @@ export async function GET(): Promise<NextResponse> {
 
     const groupMap = new Map<string, GroupRow>();
     const companyRows = companies.map((company) => {
-      const contacted = company.emailActivities.length > 0;
-      const firstActivity = company.emailActivities[0] ?? null;
-      const statuses = company.emailActivities.map((e) => e.status);
+      const visibleActivities = emailsLevel === "NONE" ? [] : company.emailActivities;
+      const visibleFollowUps = followUpsLevel === "NONE" ? [] : company.followUps;
+      const contacted = visibleActivities.length > 0;
+      const firstActivity = visibleActivities[0] ?? null;
+      const statuses = visibleActivities.map((e) => e.status);
       const replyStatus = statuses.includes("POSITIVE")
         ? "POSITIVE"
         : statuses.includes("NEGATIVE")
@@ -71,7 +84,7 @@ export async function GET(): Promise<NextResponse> {
       const hasReplied = statuses.some((s) =>
         (REPLY_STATUSES as readonly string[]).includes(s),
       );
-      const openFollowUps = company.followUps.filter(
+      const openFollowUps = visibleFollowUps.filter(
         (f) => f.status === "PENDING" || f.status === "OVERDUE",
       );
       const nextFollowUpDue =
@@ -108,8 +121,8 @@ export async function GET(): Promise<NextResponse> {
         contactedDate: firstActivity
           ? (firstActivity.sentAt ?? firstActivity.createdAt).toISOString()
           : null,
-        emailsSent: company.emailActivities.length,
-        emails: company.emailActivities.map((e) => ({
+        emailsSent: visibleActivities.length,
+        emails: visibleActivities.map((e) => ({
           id: e.id,
           subject: e.subject,
           status: e.status,
@@ -120,7 +133,7 @@ export async function GET(): Promise<NextResponse> {
         hasReplied,
         interested: statuses.includes("POSITIVE"),
         nextFollowUpDue,
-        followUps: company.followUps.map((f) => ({
+        followUps: visibleFollowUps.map((f) => ({
           id: f.id,
           dueDate: f.dueDate.toISOString(),
           status: f.status,

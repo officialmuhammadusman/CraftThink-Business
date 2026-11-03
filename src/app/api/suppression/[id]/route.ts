@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess, isSuperAdmin } from "@/lib/rbac";
 import {
   handleRoute,
   jsonOk,
@@ -10,19 +10,18 @@ import {
 } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
-import {
-  isAdmin,
-  isSuperAdmin,
-  suppressionSchema,
-} from "@/app/api/emails/shared";
+import { suppressionSchema } from "@/app/api/emails/shared";
 
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    if (level !== "ALL") return forbidden("Suppression requires full email access");
     const row = await prisma.suppression.findUnique({
       where: { id: params.id },
     });
@@ -36,9 +35,11 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!isAdmin(user)) return forbidden();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    if (level !== "ALL") return forbidden("Suppression requires full email access");
     const parsed = await parseBody(
       request,
       suppressionSchema.omit({ email: true }).partial(),
@@ -71,8 +72,10 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     // RBAC matrix: removal is Super-Admin-only. A mistaken removal
     // re-exposes someone who asked to stop — the highest-risk undo.
     if (!isSuperAdmin(user)) return forbidden();

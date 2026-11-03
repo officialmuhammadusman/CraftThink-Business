@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type CountRow = { status: string; count: number };
 type MeetingRow = {
@@ -100,11 +113,13 @@ function StatCard({
   hint: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-3xl font-semibold text-slate-900">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{hint}</p>
-    </div>
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-base font-medium text-slate-500">{label}</p>
+        <p className="mt-1 text-3xl font-semibold text-slate-900">{value}</p>
+        <p className="mt-1 text-base text-slate-500">{hint}</p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -118,16 +133,17 @@ function Breakdown({
   emptyText: string;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+    <Card>
+      <CardContent className="p-4">
+      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
       {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-500">{emptyText}</p>
+        <p className="mt-2 text-base text-slate-500">{emptyText}</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {rows.map((row) => (
             <li
               key={row.status}
-              className="flex items-center justify-between text-sm"
+              className="flex items-center justify-between text-base"
             >
               <span className="text-slate-600">
                 {row.status.replaceAll("_", " ")}
@@ -137,7 +153,8 @@ function Breakdown({
           ))}
         </ul>
       )}
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -197,7 +214,7 @@ export default function DashboardPage() {
     return (
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Dashboard</h1>
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-base text-red-700">
           {error}
         </p>
       </div>
@@ -208,7 +225,12 @@ export default function DashboardPage() {
     return (
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Dashboard</h1>
-        <p className="mt-4 text-sm text-slate-500">Loading live stats…</p>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Loading dashboard">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+        </div>
       </div>
     );
   }
@@ -235,30 +257,30 @@ export default function DashboardPage() {
   return (
     <div>
       <h1 className="text-xl font-semibold text-slate-900">Dashboard</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-base text-slate-500">
         Live counts from the database — zero means no records yet, not a
         placeholder.
       </p>
 
       {/* COVERAGE — headline view: which places are covered, and which
           businesses have been sent cold email to. No charts here. */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <Card className="mt-6"><CardContent className="p-4">
         <h2 className="text-base font-semibold text-slate-900">
           Coverage — places covered &amp; businesses contacted
         </h2>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-sm text-slate-500">
           Contacted = has at least one tracked email record. A business with
           no email record counts as not-yet-contacted. Replied = a reply,
           positive, or negative email status. Interested = a positive reply.
         </p>
         {coverageError ? (
-          <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-base text-red-700">
             {coverageError}
           </p>
         ) : !coverage ? (
-          <p className="mt-3 text-sm text-slate-500">Loading coverage…</p>
+          <Skeleton className="mt-3 h-24" />
         ) : coverage.companies.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">
+          <p className="mt-3 text-base text-slate-500">
             No businesses yet. Once companies are added, this section shows
             coverage by country, city, and industry, and which businesses
             have been contacted.
@@ -267,19 +289,19 @@ export default function DashboardPage() {
           <>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
               <div>
-                <p className="text-xs font-medium text-slate-500">Discovered</p>
+                <p className="text-sm font-medium text-slate-500">Discovered</p>
                 <p className="text-2xl font-semibold text-slate-900">
                   {coverage.totals.discovered}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500">Contacted</p>
+                <p className="text-sm font-medium text-slate-500">Contacted</p>
                 <p className="text-2xl font-semibold text-slate-900">
                   {coverage.totals.contacted}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500">
+                <p className="text-sm font-medium text-slate-500">
                   Not yet contacted
                 </p>
                 <p className="text-2xl font-semibold text-slate-900">
@@ -287,53 +309,69 @@ export default function DashboardPage() {
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500">Replied</p>
+                <p className="text-sm font-medium text-slate-500">Replied</p>
                 <p className="text-2xl font-semibold text-slate-900">
                   {coverage.totals.replied}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500">Interested</p>
+                <p className="text-sm font-medium text-slate-500">Interested</p>
                 <p className="text-2xl font-semibold text-slate-900">
                   {coverage.totals.interested}
                 </p>
               </div>
             </div>
 
-            <h3 className="mt-6 text-sm font-semibold text-slate-900">
+            <h3 className="mt-6 text-base font-semibold text-slate-900">
               Coverage by country, city &amp; industry
             </h3>
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                    <th className="py-2 pr-3">Country</th>
-                    <th className="py-2 pr-3">City</th>
-                    <th className="py-2 pr-3">Industry</th>
-                    <th className="py-2 pr-3">Discovered</th>
-                    <th className="py-2 pr-3">Contacted</th>
-                    <th className="py-2">Not yet contacted</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="mt-2 grid gap-3 md:hidden">
+              {coverage.groups.map((g) => (
+                <Card key={`${g.country}|${g.city}|${g.industry}`}>
+                  <CardContent className="p-4">
+                    <p className="text-base font-medium text-slate-900">
+                      {g.country} · {g.city}
+                    </p>
+                    <p className="text-base text-slate-500">{g.industry}</p>
+                    <p className="mt-2 text-base text-slate-700">
+                      Discovered {g.discovered} · Contacted {g.contacted} ·
+                      Not yet contacted {g.notContacted}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="mt-2 hidden overflow-x-auto md:block">
+              <Table className="w-full min-w-[560px] text-left text-base">
+                <TableHeader>
+                  <TableRow className="border-b border-slate-200 text-sm uppercase tracking-wide text-slate-500">
+                    <TableHead className="py-2 pr-3">Country</TableHead>
+                    <TableHead className="py-2 pr-3">City</TableHead>
+                    <TableHead className="py-2 pr-3">Industry</TableHead>
+                    <TableHead className="py-2 pr-3">Discovered</TableHead>
+                    <TableHead className="py-2 pr-3">Contacted</TableHead>
+                    <TableHead className="py-2">Not yet contacted</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {coverage.groups.map((g) => (
-                    <tr
+                    <TableRow
                       key={`${g.country}|${g.city}|${g.industry}`}
                       className="border-b border-slate-100 last:border-0"
                     >
-                      <td className="py-2 pr-3">{g.country}</td>
-                      <td className="py-2 pr-3">{g.city}</td>
-                      <td className="py-2 pr-3">{g.industry}</td>
-                      <td className="py-2 pr-3 font-medium">{g.discovered}</td>
-                      <td className="py-2 pr-3">{g.contacted}</td>
-                      <td className="py-2">{g.notContacted}</td>
-                    </tr>
+                      <TableCell className="py-2 pr-3">{g.country}</TableCell>
+                      <TableCell className="py-2 pr-3">{g.city}</TableCell>
+                      <TableCell className="py-2 pr-3">{g.industry}</TableCell>
+                      <TableCell className="py-2 pr-3 font-medium">{g.discovered}</TableCell>
+                      <TableCell className="py-2 pr-3">{g.contacted}</TableCell>
+                      <TableCell className="py-2">{g.notContacted}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
 
-            <h3 className="mt-6 text-sm font-semibold text-slate-900">
+            <h3 className="mt-6 text-base font-semibold text-slate-900">
               Businesses
             </h3>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -346,60 +384,66 @@ export default function DashboardPage() {
                   ["INTERESTED", "Interested"],
                 ] as [StatusFilter, string][]
               ).map(([value, label]) => (
-                <button
+                <Button
                   key={value}
                   type="button"
                   onClick={() => setStatusFilter(value)}
                   aria-pressed={statusFilter === value}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  className={`rounded-full border px-3 py-1 text-sm font-medium ${
                     statusFilter === value
                       ? "border-brand-600 bg-brand-600 text-white"
                       : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
                   }`}
                 >
                   {label}
-                </button>
+                </Button>
               ))}
-              <label className="text-xs text-slate-500">
-                Country{" "}
-                <select
-                  value={countryFilter}
-                  onChange={(e) => setCountryFilter(e.target.value)}
-                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
-                >
-                  <option value="ALL">All countries</option>
-                  {countries.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs text-slate-500">
-                Industry{" "}
-                <select
-                  value={industryFilter}
-                  onChange={(e) => setIndustryFilter(e.target.value)}
-                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
-                >
-                  <option value="ALL">All industries</option>
-                  {industries.map((i) => (
-                    <option key={i} value={i}>
-                      {i}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="flex min-h-12 items-center gap-2">
+                <Label htmlFor="country-filter" className="text-base text-slate-500">
+                  Country
+                </Label>
+                <Select value={countryFilter} onValueChange={setCountryFilter}>
+                  <SelectTrigger id="country-filter" className="w-48">
+                    <SelectValue placeholder="All countries" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All countries</SelectItem>
+                    {countries.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex min-h-12 items-center gap-2">
+                <Label htmlFor="industry-filter" className="text-base text-slate-500">
+                  Industry
+                </Label>
+                <Select value={industryFilter} onValueChange={setIndustryFilter}>
+                  <SelectTrigger id="industry-filter" className="w-48">
+                    <SelectValue placeholder="All industries" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All industries</SelectItem>
+                    {industries.map((i) => (
+                      <SelectItem key={i} value={i}>
+                        {i}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {filteredCompanies.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">
+              <p className="mt-3 text-base text-slate-500">
                 No businesses match these filters.
               </p>
             ) : (
               <ul className="mt-3 divide-y divide-slate-100">
                 {filteredCompanies.map((c) => (
                   <li key={c.id} className="py-3">
-                    <button
+                    <Button
                       type="button"
                       onClick={() =>
                         setExpandedId(expandedId === c.id ? null : c.id)
@@ -408,33 +452,33 @@ export default function DashboardPage() {
                       className="block w-full text-left"
                     >
                       <span className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="text-sm font-medium text-slate-900">
+                        <span className="text-base font-medium text-slate-900">
                           {c.name}
-                          <span className="ml-2 text-xs font-normal text-slate-500">
+                          <span className="ml-2 text-sm font-normal text-slate-500">
                             {c.country} · {c.city} · {c.industry}
                           </span>
                         </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        <Badge
+                          variant={
                             c.replyStatus === "POSITIVE"
-                              ? "bg-green-100 text-green-800"
+                              ? "success"
                               : c.replyStatus === "NEGATIVE"
-                                ? "bg-red-100 text-red-800"
+                                ? "destructive"
                                 : c.replyStatus === "REPLIED"
-                                  ? "bg-blue-100 text-blue-800"
+                                  ? "info"
                                   : c.contacted
-                                    ? "bg-slate-100 text-slate-700"
-                                    : "bg-amber-100 text-amber-800"
-                          }`}
+                                    ? "secondary"
+                                    : "warning"
+                          }
                         >
                           {c.replyStatus
                             ? `Reply: ${c.replyStatus.replaceAll("_", " ")}`
                             : c.contacted
                               ? "Contacted, no reply"
                               : "Not yet contacted"}
-                        </span>
+                        </Badge>
                       </span>
-                      <span className="mt-1 block text-xs text-slate-500">
+                      <span className="mt-1 block text-sm text-slate-500">
                         Contacted:{" "}
                         {c.contactedDate
                           ? new Date(c.contactedDate).toLocaleDateString()
@@ -447,9 +491,9 @@ export default function DashboardPage() {
                         {" · "}Tap to{" "}
                         {expandedId === c.id ? "hide" : "see"} timeline
                       </span>
-                    </button>
+                    </Button>
                     {expandedId === c.id ? (
-                      <div className="mt-2 rounded-md bg-slate-50 p-3 text-sm">
+                      <div className="mt-2 rounded-md bg-slate-50 p-3 text-base">
                         {c.emails.length === 0 ? (
                           <p className="text-slate-500">
                             No tracked emails for this business yet.
@@ -467,7 +511,7 @@ export default function DashboardPage() {
                             ))}
                           </ul>
                         )}
-                        <p className="mt-2 text-xs text-slate-500">
+                        <p className="mt-2 text-sm text-slate-500">
                           Follow-ups:{" "}
                           {c.followUps.length === 0
                             ? "none"
@@ -486,7 +530,7 @@ export default function DashboardPage() {
             )}
           </>
         )}
-      </section>
+      </CardContent></Card>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -547,18 +591,18 @@ export default function DashboardPage() {
           rows={stats.emailsByStatus}
           emptyText="No email activity yet."
         />
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
+        <Card><CardContent className="p-4">
+          <h2 className="text-base font-semibold text-slate-900">
             Upcoming meetings
           </h2>
           {stats.upcomingMeetings.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-base text-slate-500">
               No upcoming meetings scheduled.
             </p>
           ) : (
             <ul className="mt-3 space-y-3">
               {stats.upcomingMeetings.map((m) => (
-                <li key={m.id} className="text-sm">
+                <li key={m.id} className="text-base">
                   <p className="font-medium text-slate-900">{m.title}</p>
                   <p className="text-slate-500">
                     {new Date(m.dateTime).toLocaleString()} · {m.company.name}
@@ -569,20 +613,20 @@ export default function DashboardPage() {
               ))}
             </ul>
           )}
-        </section>
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2">
-          <h2 className="text-sm font-semibold text-slate-900">
+        </CardContent></Card>
+        <Card className="md:col-span-2"><CardContent className="p-4">
+          <h2 className="text-base font-semibold text-slate-900">
             Recent activity
           </h2>
           {stats.recentActivity.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-base text-slate-500">
               No activity yet. Sign-ins and future module actions will appear
               here.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
               {stats.recentActivity.map((a) => (
-                <li key={a.id} className="text-sm text-slate-600">
+                <li key={a.id} className="text-base text-slate-600">
                   <span className="font-medium text-slate-900">
                     {a.actor?.name ?? "System"}
                   </span>{" "}
@@ -595,7 +639,7 @@ export default function DashboardPage() {
               ))}
             </ul>
           )}
-        </section>
+        </CardContent></Card>
       </div>
     </div>
   );

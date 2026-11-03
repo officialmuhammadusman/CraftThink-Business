@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { handleRoute, jsonOk, unauthorized } from "@/lib/api";
-import { companyScope } from "../_scope";
+import { forbidden, handleRoute, jsonOk, unauthorized } from "@/lib/api";
+import { companyScopeForLevel } from "../_scope";
 
 /** All tags, with counts scoped to companies the caller may see. */
 export async function GET(): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const [tags, visible] = await Promise.all([
       prisma.tag.findMany({ orderBy: { name: "asc" } }),
       prisma.company.findMany({
-        where: companyScope(user),
+        where: companyScopeForLevel(user, level),
         select: { tags: { select: { id: true } } },
       }),
     ]);

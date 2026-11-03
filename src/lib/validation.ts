@@ -220,4 +220,60 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(8, "New password must be at least 8 characters").max(200),
 });
 
+// --- New permission model (additive only; existing schemas above untouched) ---
+
+/** Upsert one PermissionGrant row. Module must be a known module (see rbac.ts). */
+export const permissionGrantSchema = z.object({
+  userId: z.string().min(1, "User is required"),
+  module: z.enum([
+    "COMPANIES",
+    "CAMPAIGNS",
+    "TEMPLATES",
+    "EMAILS",
+    "FOLLOW_UPS",
+    "MEETINGS",
+    "DEALS",
+    "PROJECTS",
+    "TASKS",
+    "ACTIVITY_LOG",
+    "TEAM",
+    "SETTINGS",
+  ]),
+  level: z.enum(["NONE", "ASSIGNED", "ALL"]),
+});
+
+/**
+ * Member creation: job title only. SUPER_ADMIN and ADMIN are deliberately
+ * absent — the API also rejects them server-side (403) if sent anyway,
+ * so a hand-crafted request cannot bypass this schema.
+ */
+export const memberCreateSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(255),
+  email: z.string().trim().email("Enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(200),
+  role: z.enum([
+    "PROJECT_MANAGER",
+    "SALES_EXECUTIVE",
+    "DEVELOPER",
+    "DESIGNER",
+  ]),
+});
+
+/** Member role change: job title only, never SUPER_ADMIN / ADMIN. */
+export const memberPatchSchema = z.object({
+  role: z
+    .enum([
+      "PROJECT_MANAGER",
+      "SALES_EXECUTIVE",
+      "DEVELOPER",
+      "DESIGNER",
+    ])
+    .optional(),
+  active: z.boolean().optional(),
+});
+
+export type PermissionGrantInput = z.infer<typeof permissionGrantSchema>;
+export type MemberCreateInput = z.infer<typeof memberCreateSchema>;
+export type MemberPatchInput = z.infer<typeof memberPatchSchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;

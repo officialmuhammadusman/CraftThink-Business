@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { dealSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -11,16 +11,20 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api";
-import { canEditLinked, dealScope, isPrivileged, pickPresent } from "../../companies/_scope";
-import { DEAL_INCLUDE } from "../route";
+import { canEditLinked, dealScopeForLevel, pickPresent } from "../../companies/_scope";
+import type { PermLevel } from "@/lib/rbac";
+import { DEAL_INCLUDE } from "../_include";
 
 const patchSchema = dealSchema.omit({ companyId: true }).partial();
 
-async function visible(user: { id: string; role: string }, id: string) {
-  return prisma.deal.findFirst({
-    where: { id, AND: [dealScope(user as never) as never] },
+async function visible(user: { id: string }, id: string, level: PermLevel) {
+  const item = await prisma.deal.findFirst({
+    where: { id, AND: [dealScopeForLevel(user as never, level) as never] },
     include: DEAL_INCLUDE,
   });
+  if (item) return item;
+  const exists = await prisma.deal.findUnique({ where: { id }, select: { id: true } });
+  return exists ? ("forbidden" as const) : null;
 }
 
 export async function GET(
@@ -28,9 +32,12 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("DEALS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden();
     if (!item) return notFound("Deal not found");
     return jsonOk(item);
   });
@@ -41,11 +48,14 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("DEALS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden("You cannot edit this deal");
     if (!item) return notFound("Deal not found");
-    if (!canEditLinked(user, item))
+    if (level !== "ALL" && !canEditLinked(user, item))
       return forbidden("You cannot edit this deal");
     let body: Record<string, unknown>;
     try {
@@ -70,15 +80,18 @@ export async function PATCH(
     if (nextStatus === "LOST" && !nextNotes.trim()) {
       return jsonError("A lost deal requires a reason note", 422);
     }
-    // Reopening a Won/Lost deal is Admin-only (RBAC matrix).
+    // Reopening a Won/Lost deal requires full deal access.
     if (
       (item.status === "WON" || item.status === "LOST") &&
       nextStatus !== item.status &&
       nextStatus !== "WON" &&
       nextStatus !== "LOST" &&
-      !isPrivileged(user)
+      level !== "ALL"
     ) {
-      return forbidden("Only Admin / Super Admin reopen Won or Lost deals");
+      return forbidden("Only users with full deal access reopen Won or Lost deals");
+    }
+    if (level === "ASSIGNED" && "assignedToId" in data && data.assignedToId !== null && data.assignedToId !== user.id) {
+      return forbidden("You may not reassign this deal to someone else");
     }
     const clean: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {
@@ -106,12 +119,15 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("DEALS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden("You cannot delete this deal");
     if (!item) return notFound("Deal not found");
-    if (!isPrivileged(user))
-      return forbidden("Only Admin / Super Admin delete deals");
+    if (level !== "ALL")
+      return forbidden("Only users with full deal access delete deals");
     await prisma.deal.delete({ where: { id: item.id } });
     await writeAudit(user.id, "DEAL_DELETED", "Deal", item.id, {
       companyId: item.companyId,

@@ -1,24 +1,42 @@
 import type { Prisma } from "@prisma/client";
 import type { SessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  assignedActivityWhere,
+  assignedCompanyWhere,
+  assignedDealWhere,
+  assignedFollowUpWhere,
+  assignedMeetingWhere,
+  assignedProjectWhere,
+  assignedTaskWhere,
+  isSuperAdmin,
+  type PermLevel,
+} from "@/lib/rbac";
 
 /**
- * Shared scoping + duplicate helpers for the CRM module (Builder B).
+ * Shared scoping + duplicate helpers for the CRM module.
  * Lives under api/companies only because module files may not touch
  * src/lib/*; other CRM routes import it from here. Not a route file
  * (underscore prefix), so Next.js never serves it as an endpoint.
+ *
+ * NEW PERMISSION MODEL: "privileged" now means SUPER_ADMIN only. A
+ * legacy ADMIN role grants nothing by itself. The plain scope helpers
+ * below (companyScope, linkedScope, ...) return the ASSIGNED scope for
+ * every non-Super-Admin caller, regardless of job title. Routes must
+ * first gate with moduleAccess() from @/lib/rbac (NONE -> 403) and then
+ * pass the grant level to the *ForLevel variants, which return {} for
+ * ALL and the assigned scope for ASSIGNED. A level of NONE returns a
+ * scope matching nothing (fail-closed net; the route should already
+ * have returned 403).
  */
 
 export function isPrivileged(user: SessionUser): boolean {
-  return user.role === "SUPER_ADMIN" || user.role === "ADMIN";
+  return isSuperAdmin(user);
 }
 
+/** @deprecated Role-based create gate. Routes now gate on the grant level. */
 export function canCreateLead(user: SessionUser): boolean {
-  return (
-    user.role === "SUPER_ADMIN" ||
-    user.role === "ADMIN" ||
-    user.role === "SALES_EXECUTIVE"
-  );
+  return isPrivileged(user);
 }
 
 export function canEditLead(
@@ -26,120 +44,119 @@ export function canEditLead(
   company: { assignedToId: string | null },
 ): boolean {
   if (isPrivileged(user)) return true;
-  if (user.role === "SALES_EXECUTIVE" && company.assignedToId === user.id)
-    return true;
-  return false;
+  return company.assignedToId === user.id;
 }
 
-/** Prisma where clause scoping companies to what `user` may see. */
+/** Prisma where clause scoping companies to ASSIGNED records (non-SA). */
 export function companyScope(user: SessionUser): Prisma.CompanyWhereInput {
   if (isPrivileged(user)) return {};
-  if (user.role === "SALES_EXECUTIVE") {
-    return { assignedToId: user.id };
-  }
-  if (user.role === "PROJECT_MANAGER") {
-    return {
-      OR: [
-        { assignedToId: user.id },
-        { projects: { some: { managerId: user.id } } },
-        { projects: { some: { developers: { some: { id: user.id } } } } },
-        { meetings: { some: { assignedToId: user.id } } },
-      ],
-    };
-  }
-  // DEVELOPER / DESIGNER: only companies of projects they work on
-  // (as an assigned developer, or through an assigned task).
-  return {
-    projects: {
-      some: {
-        OR: [
-          { developers: { some: { id: user.id } } },
-          { tasks: { some: { assignedToId: user.id } } },
-        ],
-      },
-    },
-  };
+  return assignedCompanyWhere(user.id);
+}
+
+export function companyScopeForLevel(
+  user: SessionUser,
+  level: PermLevel,
+): Prisma.CompanyWhereInput {
+  if (level === "ALL" || isPrivileged(user)) return {};
+  if (level === "ASSIGNED") return assignedCompanyWhere(user.id);
+  return { id: "__no_access__" };
 }
 
 /** Scoping for records linked to a company (follow-ups, meetings, deals). */
 export function linkedScope(user: SessionUser): Prisma.FollowUpWhereInput {
   if (isPrivileged(user)) return {};
-  return {
-    OR: [{ assignedToId: user.id }, { company: { assignedToId: user.id } }],
-  };
+  return assignedFollowUpWhere(user.id);
+}
+
+export function linkedScopeForLevel(
+  user: SessionUser,
+  level: PermLevel,
+): Prisma.FollowUpWhereInput {
+  if (level === "ALL" || isPrivileged(user)) return {};
+  if (level === "ASSIGNED") return assignedFollowUpWhere(user.id);
+  return { id: "__no_access__" };
 }
 
 export function meetingScope(user: SessionUser): Prisma.MeetingWhereInput {
   if (isPrivileged(user)) return {};
-  return {
-    OR: [{ assignedToId: user.id }, { company: { assignedToId: user.id } }],
-  };
+  return assignedMeetingWhere(user.id);
+}
+
+export function meetingScopeForLevel(
+  user: SessionUser,
+  level: PermLevel,
+): Prisma.MeetingWhereInput {
+  if (level === "ALL" || isPrivileged(user)) return {};
+  if (level === "ASSIGNED") return assignedMeetingWhere(user.id);
+  return { id: "__no_access__" };
 }
 
 export function dealScope(user: SessionUser): Prisma.DealWhereInput {
   if (isPrivileged(user)) return {};
-  return {
-    OR: [{ assignedToId: user.id }, { company: { assignedToId: user.id } }],
-  };
+  return assignedDealWhere(user.id);
 }
 
-/** Scoping for projects. Sales sees projects of companies assigned to them. */
+export function dealScopeForLevel(
+  user: SessionUser,
+  level: PermLevel,
+): Prisma.DealWhereInput {
+  if (level === "ALL" || isPrivileged(user)) return {};
+  if (level === "ASSIGNED") return assignedDealWhere(user.id);
+  return { id: "__no_access__" };
+}
+
+/** Scoping for projects: manager, developer, or task assignee. */
 export function projectScope(user: SessionUser): Prisma.ProjectWhereInput {
   if (isPrivileged(user)) return {};
-  if (user.role === "PROJECT_MANAGER") {
-    return {
-      OR: [
-        { managerId: user.id },
-        { developers: { some: { id: user.id } } },
-        { tasks: { some: { assignedToId: user.id } } },
-      ],
-    };
-  }
-  if (user.role === "SALES_EXECUTIVE") {
-    return { company: { assignedToId: user.id } };
-  }
-  // DEVELOPER / DESIGNER: assigned developer, or holds a task on the project.
-  return {
-    OR: [
-      { developers: { some: { id: user.id } } },
-      { tasks: { some: { assignedToId: user.id } } },
-    ],
-  };
+  return assignedProjectWhere(user.id);
+}
+
+export function projectScopeForLevel(
+  user: SessionUser,
+  level: PermLevel,
+): Prisma.ProjectWhereInput {
+  if (level === "ALL" || isPrivileged(user)) return {};
+  if (level === "ASSIGNED") return assignedProjectWhere(user.id);
+  return { id: "__no_access__" };
 }
 
 /** Scoping for tasks (through their project, or direct assignment). */
 export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
   if (isPrivileged(user)) return {};
-  if (user.role === "PROJECT_MANAGER") {
-    return {
-      OR: [
-        { assignedToId: user.id },
-        { project: { managerId: user.id } },
-        { project: { developers: { some: { id: user.id } } } },
-      ],
-    };
-  }
-  if (user.role === "SALES_EXECUTIVE") {
-    return { project: { company: { assignedToId: user.id } } };
-  }
-  return {
-    OR: [
-      { assignedToId: user.id },
-      { project: { developers: { some: { id: user.id } } } },
-    ],
-  };
+  return assignedTaskWhere(user.id);
 }
 
-/** Who may edit/delete a project: admins, or its project manager. */
+export function taskScopeForLevel(
+  user: SessionUser,
+  level: PermLevel,
+): Prisma.TaskWhereInput {
+  if (level === "ALL" || isPrivileged(user)) return {};
+  if (level === "ASSIGNED") return assignedTaskWhere(user.id);
+  return { id: "__no_access__" };
+}
+
+/**
+ * Who may fully edit a project: Super Admin, or a member in the
+ * project's ASSIGNED scope (manager / developer / task assignee).
+ * Routes additionally require PROJECTS != NONE and, for ASSIGNED
+ * callers, forbid changing manager/developer assignment to others.
+ */
 export function canManageProject(
   user: SessionUser,
-  project: { managerId: string | null },
+  project: {
+    managerId: string | null;
+    developers?: { id: string }[];
+    tasks?: { assignedToId: string | null }[];
+  },
 ): boolean {
   if (isPrivileged(user)) return true;
-  return user.role === "PROJECT_MANAGER" && project.managerId === user.id;
+  if (project.managerId === user.id) return true;
+  if (project.developers?.some((d) => d.id === user.id)) return true;
+  if (project.tasks?.some((t) => t.assignedToId === user.id)) return true;
+  return false;
 }
 
-/** Who may fully edit a task: admins, its project manager, or a developer on the project. */
+/** Who may fully edit a task: Super Admin, its project manager/developer, or its assignee. */
 export function canManageTask(
   user: SessionUser,
   task: {
@@ -148,29 +165,37 @@ export function canManageTask(
   },
 ): boolean {
   if (isPrivileged(user)) return true;
-  if (user.role === "PROJECT_MANAGER" && task.project.managerId === user.id)
-    return true;
-  if (
-    (user.role === "DEVELOPER" || user.role === "DESIGNER") &&
-    task.project.developers.some((d) => d.id === user.id)
-  )
-    return true;
+  if (task.assignedToId === user.id) return true;
+  if (task.project.managerId === user.id) return true;
+  if (task.project.developers.some((d) => d.id === user.id)) return true;
   return false;
 }
 
-/** Activity log: admins see all; everyone else sees only their own actions. */
+/** Activity log: Super Admin sees all; ASSIGNED sees only own actions. */
 export function activityScope(user: SessionUser): Prisma.ActivityLogWhereInput {
   if (isPrivileged(user)) return {};
-  return { actorId: user.id };
+  return assignedActivityWhere(user.id);
 }
 
-/** A non-admin may see a linked record only if it is assigned to them. */
+export function activityScopeForLevel(
+  user: SessionUser,
+  level: PermLevel,
+): Prisma.ActivityLogWhereInput {
+  if (level === "ALL" || isPrivileged(user)) return {};
+  if (level === "ASSIGNED") return assignedActivityWhere(user.id);
+  return { id: "__no_access__" };
+}
+
+/** A non-Super-Admin may edit a linked record only if assigned to them (or its company). */
 export function canEditLinked(
   user: SessionUser,
-  record: { assignedToId: string | null },
+  record: { assignedToId: string | null; companyAssignedToId?: string | null },
 ): boolean {
   if (isPrivileged(user)) return true;
-  return record.assignedToId === user.id;
+  if (record.assignedToId === user.id) return true;
+  if (record.companyAssignedToId !== undefined)
+    return record.companyAssignedToId === user.id;
+  return false;
 }
 
 export function parsePagination(request: Request): {

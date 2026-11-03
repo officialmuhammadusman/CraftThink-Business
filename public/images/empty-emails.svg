@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="220" viewBox="0 0 320 220" role="img" aria-label="No emails illustration">
+  <rect width="320" height="220" rx="16" fill="#F1F5F9"/>
+  <rect x="80" y="48" width="160" height="120" rx="12" fill="#FFFFFF"/>
+  <rect x="80" y="48" width="160" height="120" rx="12" fill="none" stroke="#4F46E5" stroke-width="3"/>
+  <path d="M80 68 L160 118 L240 68" fill="none" stroke="#4F46E5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="100" y="132" width="120" height="8" rx="4" fill="#C7D2FE"/>
+  <circle cx="232" cy="168" r="20" fill="#4F46E5"/>
+  <rect x="222" y="164" width="20" height="4" rx="2" fill="#FFFFFF"/>
+  <rect x="222" y="172" width="14" height="4" rx="2" fill="#FFFFFF"/>
+</svg>

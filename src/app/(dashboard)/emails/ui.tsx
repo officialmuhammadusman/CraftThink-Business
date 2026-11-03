@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 
 export const inputCls =
   "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
@@ -117,28 +118,24 @@ export function StatusBadge({
   status: string;
   suppressed?: boolean;
 }) {
-  const color =
+  const variant =
     status === "POSITIVE"
-      ? "bg-green-100 text-green-800"
+      ? "success"
       : status === "NEGATIVE" || status === "BOUNCED"
-        ? "bg-red-100 text-red-800"
+        ? "destructive"
         : status === "REPLIED"
-          ? "bg-blue-100 text-blue-800"
+          ? "info"
           : status === "FOLLOW_UP_REQUIRED"
-            ? "bg-amber-100 text-amber-800"
+            ? "warning"
             : status === "UNSUBSCRIBED"
-              ? "bg-purple-100 text-purple-800"
-              : "bg-slate-100 text-slate-700";
+              ? "purple"
+              : "secondary";
   return (
     <span className="inline-flex flex-wrap gap-1">
-      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
+      <Badge variant={variant}>
         {status === "BOUNCED" ? "Bounced — flagged" : statusLabel(status)}
-      </span>
-      {suppressed ? (
-        <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
-          Suppressed
-        </span>
-      ) : null}
+      </Badge>
+      {suppressed ? <Badge variant="purple">Suppressed</Badge> : null}
     </span>
   );
 }

@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 type Detail = {
   id: string;
@@ -51,12 +55,6 @@ type Detail = {
   }[];
 };
 
-const inputCls =
-  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
-const btnPrimary =
-  "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50";
-const btnSecondary =
-  "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50";
 
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
@@ -205,7 +203,7 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
     return (
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Company</h1>
-        <p className="mt-4 text-sm text-slate-500">Loading…</p>
+        <p className="mt-4 text-base text-slate-500">Loading…</p>
       </div>
     );
   }
@@ -214,10 +212,10 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
     return (
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Company</h1>
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-base text-red-700">
           {error ?? "Company not found."}
         </p>
-        <Link href="/companies" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
+        <Link href="/companies" className="mt-3 inline-block text-base text-brand-600 hover:underline">
           Back to companies
         </Link>
       </div>
@@ -226,62 +224,62 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
 
   return (
     <div>
-      <Link href="/companies" className="text-sm text-brand-600 hover:underline">
+      <Link href="/companies" className="text-base text-brand-600 hover:underline">
         ← Back to companies
       </Link>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-slate-900">{company.name}</h1>
         <div className="flex gap-2">
-          <Link href={`/follow-ups?companyId=${company.id}`} className={btnSecondary}>
+          <Link href={`/follow-ups?companyId=${company.id}`} className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">
             Add follow-up
           </Link>
-          <Link href={`/meetings?companyId=${company.id}`} className={btnSecondary}>
+          <Link href={`/meetings?companyId=${company.id}`} className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">
             Add meeting
           </Link>
-          <Link href={`/deals?companyId=${company.id}`} className={btnSecondary}>
+          <Link href={`/deals?companyId=${company.id}`} className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">
             Add deal
           </Link>
-          <button type="button" onClick={() => setEditing((v) => !v)} className={btnPrimary}>
+          <Button type="button" onClick={() => setEditing((v) => !v)} variant="default">
             {editing ? "Cancel edit" : "Edit"}
-          </button>
+          </Button>
         </div>
       </div>
-      {notice && <p className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">{notice}</p>}
+      {notice && <p className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-base text-slate-700">{notice}</p>}
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Details</h2>
+        <h2 className="text-base font-semibold text-slate-900">Details</h2>
         {editing ? (
           <form onSubmit={saveEdit} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700">
+            <Label className="text-base font-medium text-slate-700">
               Status
-              <input value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Priority
-              <input value={edit.priority} onChange={(e) => setEdit({ ...edit, priority: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={edit.priority} onChange={(e) => setEdit({ ...edit, priority: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               City
-              <input value={edit.city} onChange={(e) => setEdit({ ...edit, city: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={edit.city} onChange={(e) => setEdit({ ...edit, city: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Country
-              <input value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Industry
-              <input value={edit.industry} onChange={(e) => setEdit({ ...edit, industry: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={edit.industry} onChange={(e) => setEdit({ ...edit, industry: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Description
-              <textarea value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} rows={2} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <button type="submit" className={`${btnPrimary} sm:col-span-2 justify-self-start`}>
+              <Textarea value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} rows={2} className="mt-1" />
+            </Label>
+            <Button type="submit" className={`sm:col-span-2 justify-self-start`}>
               Save changes
-            </button>
+            </Button>
           </form>
         ) : (
-          <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+          <dl className="mt-3 grid grid-cols-1 gap-2 text-base sm:grid-cols-2">
             <div><dt className="text-slate-500">Website</dt><dd className="text-slate-900">{company.website ?? "—"}</dd></div>
             <div><dt className="text-slate-500">Industry</dt><dd className="text-slate-900">{company.industry ?? "—"}</dd></div>
             <div><dt className="text-slate-500">Location</dt><dd className="text-slate-900">{[company.city, company.country].filter(Boolean).join(", ") || "—"}</dd></div>
@@ -296,93 +294,93 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
           </dl>
         )}
         <div className="mt-4">
-          <h3 className="text-sm font-medium text-slate-700">Tags</h3>
+          <h3 className="text-base font-medium text-slate-700">Tags</h3>
           <div className="mt-2 flex flex-wrap gap-2">
-            {company.tags.length === 0 && <span className="text-sm text-slate-500">No tags yet.</span>}
+            {company.tags.length === 0 && <span className="text-base text-slate-500">No tags yet.</span>}
             {company.tags.map((t) => (
-              <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+              <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-sm font-medium text-slate-700">
                 {t.name}
-                <button type="button" aria-label={`Remove tag ${t.name}`} onClick={() => removeTag(t.id, t.name)} className="text-slate-500 hover:text-red-600">
+                <Button type="button" variant="ghost" aria-label={`Remove tag ${t.name}`} onClick={() => removeTag(t.id, t.name)} className="text-slate-500 hover:text-red-600">
                   ×
-                </button>
+                </Button>
               </span>
             ))}
           </div>
           <form onSubmit={addTag} className="mt-2 flex gap-2">
-            <input value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="New tag (created if missing)" className={`${inputCls} max-w-xs`} />
-            <button type="submit" className={btnSecondary}>Add tag</button>
+            <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="New tag (created if missing)" className={`max-w-xs`} />
+            <Button type="submit" variant="outline">Add tag</Button>
           </form>
         </div>
       </section>
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Contacts</h2>
+        <h2 className="text-base font-semibold text-slate-900">Contacts</h2>
         {company.contacts.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No contacts yet.</p>
+          <p className="mt-2 text-base text-slate-500">No contacts yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {company.contacts.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm">
+              <li key={c.id} className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-base">
                 <span>
                   <span className="font-medium text-slate-900">{c.fullName}</span>
-                  {c.isDecisionMaker && <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">Decision maker</span>}
+                  {c.isDecisionMaker && <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-sm font-medium text-brand-700">Decision maker</span>}
                   <span className="block text-slate-600">
                     {c.jobTitle ?? ""} · {c.email}
                     {c.phone ? ` · ${c.phone}` : ""}
                   </span>
-                  {c.notes && <span className="block text-xs text-slate-500">{c.notes}</span>}
+                  {c.notes && <span className="block text-sm text-slate-500">{c.notes}</span>}
                 </span>
-                <button type="button" onClick={() => deleteContact(c.id, c.fullName)} className="text-sm font-medium text-red-600 hover:underline">
+                <Button type="button" onClick={() => deleteContact(c.id, c.fullName)} className="text-base font-medium text-red-600 hover:underline">
                   Delete
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
         )}
         <form onSubmit={addContact} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="text-sm font-medium text-slate-700">
+          <Label className="text-base font-medium text-slate-700">
             Full name *
-            <input required value={contactForm.fullName} onChange={(e) => setContactForm({ ...contactForm, fullName: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-          </label>
-          <label className="text-sm font-medium text-slate-700">
+            <Input required value={contactForm.fullName} onChange={(e) => setContactForm({ ...contactForm, fullName: e.target.value })} className="mt-1" />
+          </Label>
+          <Label className="text-base font-medium text-slate-700">
             Email *
-            <input required type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-          </label>
-          <label className="text-sm font-medium text-slate-700">
+            <Input required type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} className="mt-1" />
+          </Label>
+          <Label className="text-base font-medium text-slate-700">
             Job title
-            <input value={contactForm.jobTitle} onChange={(e) => setContactForm({ ...contactForm, jobTitle: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-          </label>
-          <label className="text-sm font-medium text-slate-700">
+            <Input value={contactForm.jobTitle} onChange={(e) => setContactForm({ ...contactForm, jobTitle: e.target.value })} className="mt-1" />
+          </Label>
+          <Label className="text-base font-medium text-slate-700">
             Phone
-            <input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-          </label>
-          <label className="text-sm font-medium text-slate-700">
+            <Input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} className="mt-1" />
+          </Label>
+          <Label className="text-base font-medium text-slate-700">
             LinkedIn URL
-            <input value={contactForm.linkedinUrl} onChange={(e) => setContactForm({ ...contactForm, linkedinUrl: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <Input value={contactForm.linkedinUrl} onChange={(e) => setContactForm({ ...contactForm, linkedinUrl: e.target.value })} className="mt-1" />
+          </Label>
+          <Label className="flex items-center gap-2 text-base text-slate-700">
             <input type="checkbox" checked={contactForm.isDecisionMaker} onChange={(e) => setContactForm({ ...contactForm, isDecisionMaker: e.target.checked })} />
             Decision maker
-          </label>
-          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+          </Label>
+          <Label className="text-base font-medium text-slate-700 sm:col-span-2">
             Notes
-            <textarea value={contactForm.notes} onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })} rows={2} className={`${inputCls} mt-1 font-normal`} />
-          </label>
-          <button type="submit" className={`${btnPrimary} justify-self-start`}>Add contact</button>
+            <Textarea value={contactForm.notes} onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })} rows={2} className="mt-1" />
+          </Label>
+          <Button type="submit" className={`justify-self-start`}>Add contact</Button>
         </form>
       </section>
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Email timeline</h2>
+          <h2 className="text-base font-semibold text-slate-900">Email timeline</h2>
           {company.emailActivities.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">No emails tracked for this company yet.</p>
+            <p className="mt-2 text-base text-slate-500">No emails tracked for this company yet.</p>
           ) : (
-            <ul className="mt-3 space-y-2 text-sm">
+            <ul className="mt-3 space-y-2 text-base">
               {company.emailActivities.map((e) => (
                 <li key={e.id} className="text-slate-600">
                   <span className="font-medium text-slate-900">{e.subject}</span>
-                  <span className="block text-xs text-slate-500">
+                  <span className="block text-sm text-slate-500">
                     {fmt(e.createdAt)} · {e.status.replaceAll("_", " ")} → {e.recipientEmail}
                     {e.contact ? ` · ${e.contact.fullName}` : ""}
                   </span>
@@ -392,11 +390,11 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
           )}
         </section>
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Follow-ups</h2>
+          <h2 className="text-base font-semibold text-slate-900">Follow-ups</h2>
           {company.followUps.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">No follow-ups.</p>
+            <p className="mt-2 text-base text-slate-500">No follow-ups.</p>
           ) : (
-            <ul className="mt-3 space-y-2 text-sm">
+            <ul className="mt-3 space-y-2 text-base">
               {company.followUps.map((f) => (
                 <li key={f.id} className="text-slate-600">
                   {fmt(f.dueDate)} · {f.status}
@@ -405,11 +403,11 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
               ))}
             </ul>
           )}
-          <h2 className="mt-5 text-sm font-semibold text-slate-900">Meetings</h2>
+          <h2 className="mt-5 text-base font-semibold text-slate-900">Meetings</h2>
           {company.meetings.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">No meetings.</p>
+            <p className="mt-2 text-base text-slate-500">No meetings.</p>
           ) : (
-            <ul className="mt-3 space-y-2 text-sm">
+            <ul className="mt-3 space-y-2 text-base">
               {company.meetings.map((m) => (
                 <li key={m.id} className="text-slate-600">
                   {m.title} · {fmt(m.dateTime)} · {m.status.replaceAll("_", " ")}
@@ -417,11 +415,11 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
               ))}
             </ul>
           )}
-          <h2 className="mt-5 text-sm font-semibold text-slate-900">Deals</h2>
+          <h2 className="mt-5 text-base font-semibold text-slate-900">Deals</h2>
           {company.deals.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">No deals.</p>
+            <p className="mt-2 text-base text-slate-500">No deals.</p>
           ) : (
-            <ul className="mt-3 space-y-2 text-sm">
+            <ul className="mt-3 space-y-2 text-base">
               {company.deals.map((d) => (
                 <li key={d.id} className="text-slate-600">
                   <Link href="/deals" className="font-medium text-brand-600 hover:underline">{d.title}</Link>
@@ -433,8 +431,8 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
           )}
           {company.projects.length > 0 && (
             <>
-              <h2 className="mt-5 text-sm font-semibold text-slate-900">Projects</h2>
-              <ul className="mt-3 space-y-2 text-sm">
+              <h2 className="mt-5 text-base font-semibold text-slate-900">Projects</h2>
+              <ul className="mt-3 space-y-2 text-base">
                 {company.projects.map((p) => (
                   <li key={p.id} className="text-slate-600">
                     {p.name} · {p.status.replaceAll("_", " ")}
@@ -447,11 +445,11 @@ export default function CompanyDetailPage({ params }: { params: { id: string } }
       </div>
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Activity for this company</h2>
+        <h2 className="text-base font-semibold text-slate-900">Activity for this company</h2>
         {company.activityLog.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No activity recorded yet.</p>
+          <p className="mt-2 text-base text-slate-500">No activity recorded yet.</p>
         ) : (
-          <ul className="mt-3 space-y-2 text-sm">
+          <ul className="mt-3 space-y-2 text-base">
             {company.activityLog.map((a) => (
               <li key={a.id} className="text-slate-600">
                 <span className="font-medium text-slate-900">{a.actor?.name ?? "System"}</span>

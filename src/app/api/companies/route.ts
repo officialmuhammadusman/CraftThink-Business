@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { companySchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -12,8 +12,7 @@ import {
   unauthorized,
 } from "@/lib/api";
 import {
-  canCreateLead,
-  companyScope,
+  companyScopeForLevel,
   findDuplicateCompany,
   paginationMeta,
   parsePagination,
@@ -34,8 +33,10 @@ const COMPANY_INCLUDE = {
 
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const { page, limit, skip } = parsePagination(request);
     const search = (params.get("search") ?? "").trim();
@@ -47,7 +48,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const tag = (params.get("tag") ?? "").trim();
     const contacted = params.get("contacted") ?? "";
 
-    const and: Record<string, unknown>[] = [companyScope(user)];
+    const and: Record<string, unknown>[] = [companyScopeForLevel(user, level)];
     const where = { AND: and } as Prisma.CompanyWhereInput;
     if (search) {
       and.push({
@@ -86,9 +87,10 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canCreateLead(user)) return forbidden("Only sales and admins create companies");
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const parsed = await parseBody(request, companySchema);
     if ("error" in parsed) return parsed.error;
     const data = parsed.data;
@@ -108,11 +110,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const website = data.website ? data.website.trim() : null;
     const tagNames = [...new Set((data.tagNames ?? []).map((t) => t.trim()).filter(Boolean))];
-    // Sales imports/creates become their own unless an admin assigned someone.
+    // ASSIGNED creators may only create companies for themselves;
+    // ALL may assign to anyone (or leave unassigned).
+    if (level === "ASSIGNED" && data.assignedToId?.trim() && data.assignedToId.trim() !== user.id) {
+      return forbidden("You may only create companies assigned to yourself");
+    }
     const assignedToId =
-      data.assignedToId?.trim() ||
-      (user.role === "SALES_EXECUTIVE" ? user.id : null) ||
-      null;
+      level === "ASSIGNED"
+        ? data.assignedToId?.trim() || user.id
+        : data.assignedToId?.trim() || null;
 
     try {
       const company = await prisma.company.create({

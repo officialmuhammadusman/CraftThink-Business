@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { handleRoute, unauthorized } from "@/lib/api";
-import { companyScope } from "../_scope";
+import { forbidden, handleRoute, unauthorized } from "@/lib/api";
+import { companyScopeForLevel } from "../_scope";
 
 function csvCell(value: string | null | undefined): string {
   const text = value ?? "";
@@ -16,8 +16,10 @@ function csvCell(value: string | null | undefined): string {
  */
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const search = (params.get("search") ?? "").trim();
     const country = (params.get("country") ?? "").trim();
@@ -28,7 +30,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const contacted = params.get("contacted") ?? "";
     const assignedTo = (params.get("assignedTo") ?? "").trim();
 
-    const and: Record<string, unknown>[] = [companyScope(user)];
+    const and: Record<string, unknown>[] = [companyScopeForLevel(user, level)];
     if (search) {
       and.push({
         OR: [

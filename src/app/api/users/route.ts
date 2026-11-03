@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { requireAuth, moduleAccess, isSuperAdmin } from "@/lib/rbac";
 import { hashPassword } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { userCreateSchema } from "@/lib/validation";
@@ -12,7 +12,6 @@ import {
   parseBody,
   unauthorized,
 } from "@/lib/api";
-import { isPrivileged } from "../companies/_scope";
 
 const PUBLIC_SELECT = {
   id: true,
@@ -22,18 +21,28 @@ const PUBLIC_SELECT = {
   active: true,
   createdAt: true,
   updatedAt: true,
+  permissionGrants: { select: { module: true, level: true } },
 } as const;
 
 // passwordHash is NEVER selected or returned by any user route.
 
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!isPrivileged(user)) return forbidden("Only admins manage the team");
+    // Team listing is TEAM-gated: ALL sees everyone, ASSIGNED sees
+    // only themselves, NONE is forbidden. The Team page itself is
+    // Super-Admin-only; this API rule is what actually protects data.
+    const access = await moduleAccess("TEAM");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const role = new URL(request.url).searchParams.get("role") ?? "";
     const items = await prisma.user.findMany({
-      where: role ? { role: role as never } : {},
+      where:
+        level === "ALL"
+          ? role
+            ? { role: role as never }
+            : {}
+          : { id: user.id },
       select: PUBLIC_SELECT,
       orderBy: { createdAt: "desc" },
     });
@@ -45,10 +54,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
     const user = await requireAuth();
     if (!user) return unauthorized();
-    if (!isPrivileged(user)) return forbidden("Only admins create users");
+    // Only the Super Admin creates users — never by job title.
+    if (!isSuperAdmin(user)) return forbidden("Only the Super Admin creates users");
     const parsed = await parseBody(request, userCreateSchema);
     if ("error" in parsed) return parsed.error;
     const data = parsed.data;
+    // No new SUPER_ADMIN or ADMIN accounts, ever (enforced here even
+    // if a hand-crafted request bypasses the UI's job-title-only form).
+    if (data.role === "SUPER_ADMIN" || data.role === "ADMIN") {
+      return forbidden("New Super Admin and Admin accounts cannot be created");
+    }
     const existing = await prisma.user.findUnique({
       where: { email: data.email.trim().toLowerCase() },
       select: { id: true },

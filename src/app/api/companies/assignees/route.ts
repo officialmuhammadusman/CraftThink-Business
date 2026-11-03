@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { handleRoute, jsonOk, unauthorized } from "@/lib/api";
-import { isPrivileged } from "../_scope";
+import { forbidden, handleRoute, jsonOk, unauthorized } from "@/lib/api";
 
 /**
  * Active users for assignee dropdowns. Admins see everyone; everyone else
@@ -10,10 +9,12 @@ import { isPrivileged } from "../_scope";
  */
 export async function GET(): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const users = await prisma.user.findMany({
-      where: isPrivileged(user) ? { active: true } : { id: user.id },
+      where: level === "ALL" ? { active: true } : { id: user.id },
       select: { id: true, name: true, email: true, role: true },
       orderBy: { name: "asc" },
     });

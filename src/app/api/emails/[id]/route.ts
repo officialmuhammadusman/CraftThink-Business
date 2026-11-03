@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess, getPermission } from "@/lib/rbac";
 import {
   handleRoute,
   jsonError,
@@ -13,8 +13,6 @@ import { writeAudit } from "@/lib/audit";
 import { emailActivitySchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
 import {
-  isAdmin,
-  canManageOutreach,
   activityInclude,
   syncFollowUpForActivity,
   ensureSuppressed,
@@ -28,13 +26,13 @@ async function loadActivity(id: string) {
   });
 }
 
-/** Non-admin callers may only touch records assigned to them. */
+/** ASSIGNED callers may only touch records assigned to them; ALL may touch any. */
 function visibleTo(
   activity: { assignedToId: string | null },
   userId: string,
-  admin: boolean,
+  all: boolean,
 ): boolean {
-  return admin || activity.assignedToId === userId;
+  return all || activity.assignedToId === userId;
 }
 
 export async function GET(
@@ -42,11 +40,13 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const activity = await loadActivity(params.id);
     if (!activity) return notFound("Email record not found");
-    if (!visibleTo(activity, user.id, isAdmin(user))) return forbidden();
+    if (!visibleTo(activity, user.id, level === "ALL")) return forbidden();
 
     const prefix = `Follow-up for tracked email ${activity.id}`;
     const followUps = await prisma.followUp.findMany({
@@ -65,13 +65,14 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const parsed = await parseBody(request, emailActivitySchema.partial());
     if ("error" in parsed) return parsed.error;
     const data = parsed.data;
-    const admin = isAdmin(user);
+    const admin = level === "ALL";
 
     const existing = await loadActivity(params.id);
     if (!existing) return notFound("Email record not found");
@@ -79,14 +80,16 @@ export async function PATCH(
 
     const update: Record<string, unknown> = {};
     if (data.companyId !== undefined) {
-      const company = await prisma.company.findUnique({
-        where: { id: data.companyId },
+      const companiesLevel = await getPermission(user.id, "COMPANIES");
+      if (companiesLevel === "NONE") return forbidden("You have no company access");
+      const company = await prisma.company.findFirst({
+        where: {
+          id: data.companyId,
+          ...(companiesLevel === "ASSIGNED" ? { assignedToId: user.id } : {}),
+        },
         select: { id: true, assignedToId: true },
       });
-      if (!company) return jsonError("Company not found", 422);
-      if (!admin && company.assignedToId !== user.id) {
-        return forbidden("Company is not assigned to you");
-      }
+      if (!company) return forbidden("Company is not visible to you");
       update.companyId = data.companyId;
     }
     const companyId = (update.companyId as string | undefined) ?? existing.companyId;
@@ -106,14 +109,16 @@ export async function PATCH(
     }
     if (data.campaignId !== undefined) {
       if (data.campaignId) {
-        const campaign = await prisma.campaign.findUnique({
-          where: { id: data.campaignId },
+        const campaignsLevel = await getPermission(user.id, "CAMPAIGNS");
+        if (campaignsLevel === "NONE") return forbidden("You have no campaign access");
+        const campaign = await prisma.campaign.findFirst({
+          where: {
+            id: data.campaignId,
+            ...(campaignsLevel === "ASSIGNED" ? { ownerId: user.id } : {}),
+          },
           select: { id: true, ownerId: true },
         });
-        if (!campaign) return jsonError("Campaign not found", 422);
-        if (!admin && campaign.ownerId !== user.id) {
-          return forbidden("Campaign is not yours");
-        }
+        if (!campaign) return forbidden("Campaign is not visible to you");
         update.campaignId = data.campaignId;
       } else {
         update.campaignId = null;
@@ -140,7 +145,7 @@ export async function PATCH(
     if (data.sentAt !== undefined) update.sentAt = data.sentAt ?? null;
     if (data.followUpDate !== undefined) update.followUpDate = data.followUpDate ?? null;
     if (data.assignedToId !== undefined) {
-      // Non-admin editors may only keep the record assigned to themselves.
+      // ASSIGNED editors may only keep the record assigned to themselves.
       if (admin) {
         if (data.assignedToId) {
           const assignee = await prisma.user.findUnique({
@@ -183,10 +188,12 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    // Delete is Admin / Super Admin only (task rule 3e).
-    if (!isAdmin(user)) return forbidden();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    // Email deletion requires full email access.
+    if (level !== "ALL") return forbidden();
     const existing = await loadActivity(params.id);
     if (!existing) return notFound("Email record not found");
 

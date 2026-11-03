@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
@@ -10,7 +10,6 @@ import {
   unauthorized,
 } from "@/lib/api";
 import {
-  canCreateLead,
   findDuplicateCompany,
   findDuplicateContact,
   normalizeName,
@@ -80,10 +79,12 @@ function isEmail(value: string): boolean {
  */
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canCreateLead(user))
-      return forbidden("Only sales and admins import companies");
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    // Imported companies belong to the importer unless the caller has
+    // full access (ALL), in which case they stay unassigned.
     let form: FormData;
     try {
       form = await request.formData();
@@ -147,8 +148,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           source: get(row, "source") || null,
           status: get(row, "status") || "NEW",
           priority: get(row, "priority") || "MEDIUM",
-          assignedToId:
-            user.role === "SALES_EXECUTIVE" ? user.id : undefined,
+          assignedToId: level === "ASSIGNED" ? user.id : undefined,
         },
       });
       imported++;

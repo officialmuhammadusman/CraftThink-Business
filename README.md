@@ -77,7 +77,8 @@ refuses to run unless `SEED_DEV=true`. Never run it against production.
   companies with no website (PostgreSQL treats NULL as distinct), so
   module builders must also check duplicates in code.
 - `src/lib/` — `prisma.ts` (singleton), `auth.ts` (hash/verify, JWT
-  session, `getSessionUser`), `rbac.ts` (role hierarchy, `can`,
+  session, `getSessionUser`), `rbac.ts` (PermissionGrant model, `MODULES`,
+  `getPermission`, `requirePermission`, `moduleAccess`, plus legacy `can`,
   `requireAuth`, `requireRole`), `validation.ts` (Zod schemas),
   `audit.ts` (`writeAudit`), `api.ts` (JSON/error helpers).
 - API routes — `api/auth/login`, `api/auth/logout`, `api/auth/me`,
@@ -87,7 +88,7 @@ refuses to run unless `SEED_DEV=true`. Never run it against production.
 - Pages — `/login` (real sign-in with error handling), `/` dashboard (see
   Coverage below), plus full pages for Companies, Campaigns, Templates,
   Emails (+ import/new), Suppression, Follow-ups, Meetings, Deals,
-  Projects (+ detail), Tasks, Activity Log, Team (admins only) and
+  Projects (+ detail), Tasks, Activity Log, Team (Super Admin only) and
   Settings (change own password).
 - **Milestone 2 (built): Projects, Tasks, Team, Settings.** Projects:
   full CRUD with client company, budget, dates, manager, assigned
@@ -99,12 +100,13 @@ refuses to run unless `SEED_DEV=true`. Never run it against production.
   Scoping is server-side: developers/designers see only projects they
   are assigned to (as a developer or through a task) and only their own
   tasks; task assignees may update only their own status/progress.
-  Team (Super Admin + Admin only): list users, create with role,
-  deactivate/reactivate, change roles — password hashes are never
+  Team (Super Admin only): list users, create with job title only,
+  deactivate/reactivate, change job titles, and grant per-module
+  permissions (see Permissions below) — password hashes are never
   returned by any API, and the last active Super Admin cannot be removed
   (nor can you deactivate your own account). Settings: any signed-in
   user changes their own password after verifying the current one
-  (bcrypt cost 12). Sidebar links to Projects, Tasks, Team (admins
+  (bcrypt cost 12). Sidebar links to Projects, Tasks, Team (Super Admin
   only) and Settings; every sidebar link now points to a real page.
   totals discovered/contacted/not-yet-contacted/replied/interested, a
   table grouped by country, then city, then industry, and a per-business
@@ -144,3 +146,19 @@ refuses to run unless `SEED_DEV=true`. Never run it against production.
 - No scheduled jobs, no follow-up overdue auto-flip job (the dashboard
   computes overdue from `dueDate`, so stale stored status never hides it).
 - No fake production data and no hardcoded stats anywhere.
+
+## Permissions (new model — supersedes the old role matrix)
+
+One Super Admin (the seeded account) bypasses everything. Every other
+member has a job title only (Project Manager, Sales Executive, Developer,
+Designer) — the title grants nothing by itself. Access comes only from
+`PermissionGrant` rows (one per user + module, level `NONE` / `ASSIGNED` /
+`ALL`), enforced server-side on every API route: `NONE` → 403,
+`ASSIGNED` → only records assigned to them, `ALL` → unscoped. No new
+`SUPER_ADMIN` or `ADMIN` accounts can be created (the `ADMIN` enum value
+is kept in the schema only so existing data stays valid). The Super Admin
+grants permissions in the Team page's per-member permission table, saved
+via `PUT /api/users/[id]/permissions` (Super Admin only, audit-logged);
+members start with no access until granted. Full matrix, assigned-scope
+definitions, and exceptions (e.g. suppression list requires `EMAILS=ALL`,
+suppression removal stays Super-Admin-only): see `docs/rbac-matrix.md`.

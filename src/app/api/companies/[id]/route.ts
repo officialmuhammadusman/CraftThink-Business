@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess, getPermission } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { companySchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -13,10 +13,8 @@ import {
   unauthorized,
 } from "@/lib/api";
 import {
-  canEditLead,
-  companyScope,
+  companyScopeForLevel,
   findDuplicateCompany,
-  isPrivileged,
   pickPresent,
 } from "../_scope";
 
@@ -67,27 +65,77 @@ async function visibleCompany(userId: string, companyId: string, scope: object) 
   });
 }
 
+/** Null = does not exist; "forbidden" = exists but outside caller's scope. */
+async function scopedOrForbidden(
+  userId: string,
+  companyId: string,
+  scope: object,
+): Promise<null | "forbidden" | true> {
+  const scoped = await prisma.company.findFirst({
+    where: { id: companyId, AND: [scope as never] },
+    select: { id: true },
+  });
+  if (scoped) return true;
+  const exists = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { id: true },
+  });
+  return exists ? "forbidden" : null;
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const company = await visibleCompany(user.id, params.id, companyScope(user));
-    if (!company) return notFound("Company not found");
-    const activity = await prisma.activityLog.findMany({
-      where: {
-        OR: [
-          { entityType: "Company", entityId: company.id },
-          { details: { path: ["companyId"], equals: company.id } },
-        ],
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: { actor: { select: { id: true, name: true, email: true } } },
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const company = await visibleCompany(user.id, params.id, companyScopeForLevel(user, level));
+    if (!company) {
+      const check = await scopedOrForbidden(user.id, params.id, companyScopeForLevel(user, level));
+      if (check === "forbidden") return forbidden();
+      return notFound("Company not found");
+    }
+    // Activity timeline is ACTIVITY_LOG-gated: NONE hides it, ASSIGNED
+    // shows only the caller's own actions, ALL shows everything.
+    const logLevel = await getPermission(user.id, "ACTIVITY_LOG");
+    const activity =
+      logLevel === "NONE"
+        ? []
+        : await prisma.activityLog.findMany({
+            where: {
+              AND: [
+                {
+                  OR: [
+                    { entityType: "Company", entityId: company.id },
+                    { details: { path: ["companyId"], equals: company.id } },
+                  ],
+                },
+                ...(logLevel === "ASSIGNED" ? [{ actorId: user.id }] : []),
+              ],
+            },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+            include: { actor: { select: { id: true, name: true, email: true } } },
+          });
+    // Embedded related lists are filtered by their own module grants:
+    // a caller with EMAILS=NONE sees no email activities here, etc.
+    const emailsLevel = await getPermission(user.id, "EMAILS");
+    const followUpsLevel = await getPermission(user.id, "FOLLOW_UPS");
+    const meetingsLevel = await getPermission(user.id, "MEETINGS");
+    const dealsLevel = await getPermission(user.id, "DEALS");
+    const projectsLevel = await getPermission(user.id, "PROJECTS");
+    return jsonOk({
+      ...company,
+      emailActivities: emailsLevel === "NONE" ? [] : company.emailActivities,
+      followUps: followUpsLevel === "NONE" ? [] : company.followUps,
+      meetings: meetingsLevel === "NONE" ? [] : company.meetings,
+      deals: dealsLevel === "NONE" ? [] : company.deals,
+      projects: projectsLevel === "NONE" ? [] : company.projects,
+      activityLog: activity,
     });
-    return jsonOk({ ...company, activityLog: activity });
   });
 }
 
@@ -96,14 +144,19 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const existing = await prisma.company.findFirst({
-      where: { id: params.id, AND: [companyScope(user) as never] },
+      where: { id: params.id, AND: [companyScopeForLevel(user, level) as never] },
       select: { id: true, name: true, website: true, assignedToId: true },
     });
-    if (!existing) return notFound("Company not found");
-    if (!canEditLead(user, existing)) return forbidden("You cannot edit this company");
+    if (!existing) {
+      const check = await scopedOrForbidden(user.id, params.id, companyScopeForLevel(user, level));
+      if (check === "forbidden") return forbidden("You cannot edit this company");
+      return notFound("Company not found");
+    }
     let body: Record<string, unknown>;
     try {
       body = (await request.json()) as Record<string, unknown>;
@@ -119,6 +172,16 @@ export async function PATCH(
       );
     }
     const data = pickPresent(body, parsed.data);
+    // ASSIGNED editors may not hand a company to someone else.
+    if (
+      level === "ASSIGNED" &&
+      "assignedToId" in data &&
+      (data.assignedToId as string | null) !== null &&
+      (data.assignedToId as string) !== user.id &&
+      (data.assignedToId as string) !== existing.assignedToId
+    ) {
+      return forbidden("You may not reassign this company to someone else");
+    }
     const nextName = (data.name as string | undefined) ?? existing.name;
     const nextWebsite =
       "website" in data ? ((data.website as string | null) ?? null) : existing.website;
@@ -173,9 +236,11 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!isPrivileged(user)) return forbidden("Only Admin / Super Admin delete companies");
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    if (level !== "ALL") return forbidden("Only users with full company access delete companies");
     const company = await prisma.company.findUnique({
       where: { id: params.id },
       select: {

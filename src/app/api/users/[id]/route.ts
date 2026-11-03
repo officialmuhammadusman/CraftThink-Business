@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { requireAuth, isSuperAdmin } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { userPatchSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -11,7 +11,6 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api";
-import { isPrivileged } from "../../companies/_scope";
 
 const PUBLIC_SELECT = {
   id: true,
@@ -21,6 +20,7 @@ const PUBLIC_SELECT = {
   active: true,
   createdAt: true,
   updatedAt: true,
+  permissionGrants: { select: { module: true, level: true } },
 } as const;
 
 export async function PATCH(
@@ -30,7 +30,8 @@ export async function PATCH(
   return handleRoute(async () => {
     const user = await requireAuth();
     if (!user) return unauthorized();
-    if (!isPrivileged(user)) return forbidden("Only admins manage the team");
+    // Only the Super Admin changes roles or (de)activates members.
+    if (!isSuperAdmin(user)) return forbidden("Only the Super Admin manages the team");
     const target = await prisma.user.findUnique({
       where: { id: params.id },
       select: PUBLIC_SELECT,
@@ -49,6 +50,10 @@ export async function PATCH(
         first ? `${first.path.join(".") || "body"}: ${first.message}` : "Invalid body",
         422,
       );
+    }
+    // No member may be promoted to SUPER_ADMIN or ADMIN.
+    if (parsed.data.role === "SUPER_ADMIN" || parsed.data.role === "ADMIN") {
+      return forbidden("Members cannot be given Super Admin or Admin roles");
     }
     // Safety rails: never deactivate your own account, and never remove
     // the last active Super Admin (by role change or deactivation).

@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { handleRoute, jsonOk, unauthorized } from "@/lib/api";
+import { forbidden, handleRoute, jsonOk, unauthorized } from "@/lib/api";
 import {
   paginationMeta,
   parsePagination,
-  taskScope,
+  taskScopeForLevel,
 } from "../companies/_scope";
 import { TASK_INCLUDE } from "../_includes";
 
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("TASKS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const { page, limit, skip } = parsePagination(request);
     const status = (params.get("status") ?? "").trim();
     const projectId = (params.get("projectId") ?? "").trim();
     const assignedTo = (params.get("assignedTo") ?? "").trim();
-    const and: Record<string, unknown>[] = [taskScope(user)];
+    const and: Record<string, unknown>[] = [taskScopeForLevel(user, level)];
     if (status) and.push({ status });
     if (projectId) and.push({ projectId });
     if (assignedTo) and.push({ assignedToId: assignedTo });

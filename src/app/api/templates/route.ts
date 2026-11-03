@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import {
   handleRoute,
   jsonOk,
@@ -14,17 +14,17 @@ import { prisma } from "@/lib/prisma";
 import {
   parsePagination,
   paginationMeta,
-  canManageOutreach,
 } from "@/app/api/emails/shared";
 
-// Templates are shared content (per the RBAC matrix: every seller uses
-// the same good templates), so the list is visible to all signed-in
-// users. Creating/editing is limited to Super Admin, Admin, and Sales
-// Executive; deleting is Admin/Super Admin only (see [id]/route.ts).
+// Templates are shared content: TEMPLATES=ASSIGNED or ALL may read the
+// shared library (needed to compose assigned emails). Creating,
+// editing and deleting a shared template require TEMPLATES=ALL.
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("TEMPLATES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const { page, limit } = parsePagination(params);
     const search = params.get("search")?.trim() ?? "";
@@ -55,9 +55,11 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
+    const access = await moduleAccess("TEMPLATES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    if (level !== "ALL") return forbidden("Only users with full template access may create templates");
     const parsed = await parseBody(request, templateSchema);
     if ("error" in parsed) return parsed.error;
 

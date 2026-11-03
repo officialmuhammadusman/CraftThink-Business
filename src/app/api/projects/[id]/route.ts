@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { projectSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -12,20 +12,22 @@ import {
   unauthorized,
 } from "@/lib/api";
 import {
-  canManageProject,
-  isPrivileged,
   pickPresent,
-  projectScope,
+  projectScopeForLevel,
 } from "../../companies/_scope";
+import type { PermLevel } from "@/lib/rbac";
 import { PROJECT_INCLUDE } from "../../_includes";
 
 const patchSchema = projectSchema.omit({ companyId: true, dealId: true }).partial();
 
-async function visible(user: { id: string; role: string }, id: string) {
-  return prisma.project.findFirst({
-    where: { id, AND: [projectScope(user as never) as never] },
+async function visible(user: { id: string }, id: string, level: PermLevel) {
+  const item = await prisma.project.findFirst({
+    where: { id, AND: [projectScopeForLevel(user as never, level) as never] },
     include: PROJECT_INCLUDE,
   });
+  if (item) return item;
+  const exists = await prisma.project.findUnique({ where: { id }, select: { id: true } });
+  return exists ? ("forbidden" as const) : null;
 }
 
 export async function GET(
@@ -33,9 +35,12 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("PROJECTS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden();
     if (!item) return notFound("Project not found");
     return jsonOk(item);
   });
@@ -46,11 +51,16 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("PROJECTS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden("You cannot edit this project");
     if (!item) return notFound("Project not found");
-    if (!canManageProject(user, item))
+    // Full project edits need full access or being the project manager.
+    // A developer who can see the project (ASSIGNED scope) may not edit it.
+    if (level !== "ALL" && item.managerId !== user.id)
       return forbidden("You cannot edit this project");
     let body: Record<string, unknown>;
     try {
@@ -73,8 +83,10 @@ export async function PATCH(
       clean[key] = typeof value === "string" ? value.trim() || null : value;
     }
     if (typeof clean.name === "string") clean.name = (clean.name as string).trim();
-    // Non-admin PMs cannot hand their project to another manager.
-    if (!isPrivileged(user) && "managerId" in clean) clean.managerId = user.id;
+    // ASSIGNED managers cannot hand their project to another manager.
+    if (level === "ASSIGNED" && "managerId" in clean && clean.managerId !== user.id) {
+      return forbidden("You may not reassign this project to another manager");
+    }
     const updateData: Record<string, unknown> = { ...clean };
     if ("developerIds" in data && Array.isArray(data.developerIds)) {
       const developerIds = [...new Set(data.developerIds.map((d) => String(d).trim()).filter(Boolean))];
@@ -107,11 +119,14 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("PROJECTS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden("You cannot delete this project");
     if (!item) return notFound("Project not found");
-    if (!isPrivileged(user)) return forbidden("Only admins delete projects");
+    if (level !== "ALL") return forbidden("Only users with full project access delete projects");
     await prisma.project.delete({ where: { id: item.id } });
     await writeAudit(user.id, "PROJECT_DELETED", "Project", item.id, {
       companyId: item.companyId,

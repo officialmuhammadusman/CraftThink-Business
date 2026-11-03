@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import {
   handleRoute,
   jsonError,
@@ -15,21 +15,21 @@ import { prisma } from "@/lib/prisma";
 import {
   parsePagination,
   paginationMeta,
-  isAdmin,
-  canManageOutreach,
 } from "@/app/api/emails/shared";
 
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("CAMPAIGNS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const { page, limit } = parsePagination(params);
     const search = params.get("search")?.trim() ?? "";
 
-    // Non-admin roles see only campaigns they own.
+    // ASSIGNED sees only campaigns they own; ALL sees everything.
     const where: Prisma.CampaignWhereInput = {};
-    if (!isAdmin(user)) where.ownerId = user.id;
+    if (level === "ASSIGNED") where.ownerId = user.id;
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
@@ -57,16 +57,20 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
+    const access = await moduleAccess("CAMPAIGNS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const parsed = await parseBody(request, campaignSchema);
     if ("error" in parsed) return parsed.error;
 
-    // Non-admin creators always own their campaign; only admins may
-    // assign a different owner.
+    // ASSIGNED creators always own their campaign and may not assign
+    // it to someone else; ALL may assign a different owner.
     let ownerId: string | null = user.id;
-    if (isAdmin(user) && parsed.data.ownerId) {
+    if (level === "ASSIGNED" && parsed.data.ownerId && parsed.data.ownerId !== user.id) {
+      return forbidden("You may only create campaigns for yourself");
+    }
+    if (level === "ALL" && parsed.data.ownerId) {
       const owner = await prisma.user.findUnique({
         where: { id: parsed.data.ownerId },
       });

@@ -19,12 +19,37 @@ datasource db {
 }
 
 enum Role {
+  // Kept as-is on purpose: removing ADMIN would break existing data.
+  // The new permission model (see docs/rbac-matrix.md) instead forbids
+  // CREATING new ADMIN / SUPER_ADMIN users in code (validation + API
+  // routes), and grants access only via PermissionGrant rows. A user's
+  // role value below is a job title / display label only, except
+  // SUPER_ADMIN, which is the single system owner and bypasses grants.
   SUPER_ADMIN
   ADMIN
   PROJECT_MANAGER
   SALES_EXECUTIVE
   DEVELOPER
   DESIGNER
+}
+
+// One row per (user, module). This is the ONLY source of module access
+// for non-Super-Admin users: a job title alone grants nothing.
+// level is kept as a string (NONE / ASSIGNED / ALL) so no enum migration
+// is needed to add modules later; MODULES in src/lib/rbac.ts is the
+// authoritative module list and routes validate against it.
+model PermissionGrant {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module    String
+  level     String   @default("NONE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, module])
+  @@index([userId])
+  @@index([module])
 }
 
 enum EmailStatus {
@@ -112,6 +137,7 @@ model User {
   taskComments       TaskComment[]
   tasksAssigned      Task[]         @relation("TaskAssignee")
   activityLogs       ActivityLog[]  @relation("ActivityActor")
+  permissionGrants   PermissionGrant[]
 
   @@index([role])
   @@index([active])

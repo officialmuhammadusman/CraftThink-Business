@@ -1,154 +1,183 @@
-# CraftThink Business OS — RBAC Permission Matrix
+# CraftThink Business OS — Permission Model (RBAC)
 
 > Companion to `prd.md` and `architecture.md`.
-> **Golden rule: employees see only assigned data unless explicitly authorised.**
-> "Assigned" = owner/assignee/manager on that record, or a member of its project.
-> This matrix is enforced **server-side on every API route** (see `architecture.md`
-> §5.2). UI hiding is presentation only and grants nothing.
+> **Golden rule: members see only tasks given to them or info shared with
+> them — nothing else.**
+> This model is enforced **server-side on every API route**
+> (`src/lib/rbac.ts`, `moduleAccess()` + scoped Prisma queries).
+> Hiding a sidebar link is presentation only and grants nothing.
 
-## 1. Roles
+## 1. One Super Admin, job titles, and permission rows
 
-| Role | Who (in a 2-person-first team) | Short description |
-|---|---|---|
-| **Super Admin** | Founder/CEO (1 person) | Owns the system. Only role that manages users/roles and can remove suppression entries. |
-| **Admin** | Trusted manager / second founder | Day-to-day management of all business data and most settings. Cannot create Super Admins or change another Admin's role (see §3). |
-| **Project Manager** | Delivery lead | Owns projects and tasks; sees sales data only for deals/projects assigned to them. |
-| **Sales Executive** | Outreach / closer | Owns leads, campaigns, deals, meetings assigned to them. |
-| **Developer** | Builder | Works assigned project tasks; sees project context for assigned work only. |
-| **Designer** | Designer | Same shape as Developer, for design work. |
+There is exactly **one Super Admin**: the seeded account. The Super Admin
+bypasses every permission check, manages the team, and is the only user
+who may remove a suppression entry.
 
-No role is "everyone can see everything" except Super Admin and Admin.
-A user has exactly one role in v1 (no multi-role, no per-record custom roles).
+Every other user has a **job title** — one of:
 
-## 2. Matrix
+| Job title | Meaning |
+|---|---|
+| PROJECT_MANAGER | Delivery lead (title only) |
+| SALES_EXECUTIVE | Outreach / closer (title only) |
+| DEVELOPER | Builder (title only) |
+| DESIGNER | Designer (title only) |
 
-Legend: **●** = allowed · **◐** = only assigned/own data · **—** = not allowed.
-"Assigned" for leads/emails/deals = owner; for projects/tasks = manager/assignee/
-project member; for meetings = organiser or attendee on that meeting.
+A job title is **display / title only: it grants nothing by itself**.
+A Developer and a Sales Executive with the same permission rows see
+exactly the same data. Access comes only from **`PermissionGrant` rows**
+(`prisma/schema.prisma`): one row per (user, module), with a level.
 
-### 2.1 Leads (companies, contacts, tags, import, timeline, notes)
+There is **no separate full-control role to grant**. The old `ADMIN`
+value still exists in the `Role` enum in the schema — removing it would
+break existing data — but it is not offered anywhere in the UI, and the
+API rejects creating a user with role `SUPER_ADMIN` or `ADMIN` (403),
+and rejects changing a member's role to either of them (403). Existing
+`ADMIN` rows, if any, grant nothing on their own: such a user only sees
+what their `PermissionGrant` rows allow.
 
-| Action | Super Admin | Admin | Project Mgr | Sales Exec | Developer | Designer |
-|---|---|---|---|---|---|---|
-| View companies / contacts | ● | ● | ◐ (for assigned projects' companies) | ◐ (own leads) | ◐ (assigned projects' companies only) | ◐ (assigned projects' companies only) |
-| Create company / contact | ● | ● | — | ● | — | — |
-| Edit company / contact | ● | ● | — | ◐ (own) | — | — |
-| Delete / archive company / contact | ● | ● | — | — (request to Admin) | — | — |
-| CSV import contacts | ● | ● | — | ● (imports become own) | — | — |
-| Manage tags (create/delete) | ● | ● | — | ● (create; delete own use only via Admin) | — | — |
-| Add note to a contact | ● | ● | ◐ (assigned) | ◐ (own) | ◐ (assigned project contact) | ◐ (assigned project contact) |
-| View full contact timeline | ● | ● | ◐ (assigned) | ◐ (own) | ◐ (assigned) | ◐ (assigned) |
+A member with **no grant row for a module defaults to `NONE`** for that
+module. New members therefore start with no access until the Super Admin
+grants it in the Team page's permission table.
 
-### 2.2 Emails (templates, campaigns, sequences, sending, replies, suppression)
+## 2. Modules and levels
 
-| Action | Super Admin | Admin | Project Mgr | Sales Exec | Developer | Designer |
-|---|---|---|---|---|---|---|
-| View templates | ● | ● | — | ● (all active templates — templates are shared content, not personal data) | — | — |
-| Create / edit template | ● | ● | — | ● | — | — |
-| Delete / deactivate template | ● | ● | — | — (Admin only, to avoid breaking live campaigns) | — | — |
-| Create campaign | ● | ● | — | ● | — | — |
-| Edit campaign (draft only) | ● | ● | — | ◐ (own, draft only) | — | — |
-| Start / pause / resume campaign | ● | ● | — | ◐ (own) | — | — |
-| Enroll contacts in campaign | ● | ● | — | ◐ (own contacts, own campaigns) | — | — |
-| Send manual email | ● | ● | — | ◐ (own contacts; send gate always applies) | — | — |
-| View email activities / replies | ● | ● | — | ◐ (own contacts/campaigns) | — | — |
-| Classify a reply (positive/negative/follow-up-required) | ● | ● | — | ◐ (own) | — | — |
-| Create / complete follow-ups | ● | ● | ◐ (own follow-ups) | ◐ (own) | ◐ (own) | ◐ (own) |
-| View suppression list | ● | ● | — | ◐ (check own contacts only — no full-list export) | — | — |
-| Add to suppression list | ● | ● | — | ● (any unsubscribe/bounce they record, for their contacts) | — | — |
-| Remove from suppression list | ● | — | — | — | — | — |
-| View campaign analytics | ● | ● | — | ◐ (own campaigns) | — | — |
+Modules (`MODULES` in `src/lib/rbac.ts`):
 
-Notes: template *content* is shared (everyone selling should use the same good
-templates), but campaign *audiences and results* are per-owner. Suppression
-removal is Super-Admin-only because a mistaken removal re-exposes someone who
-asked to stop — the highest-risk undo in the system.
+| Module | Covers |
+|---|---|
+| COMPANIES | Companies, contacts, tags, CSV import/export |
+| CAMPAIGNS | Campaigns |
+| TEMPLATES | Shared email templates (read = shared library) |
+| EMAILS | Email activity tracking, lookups, CSV import, suppression* |
+| FOLLOW_UPS | Follow-ups |
+| MEETINGS | Meetings |
+| DEALS | Deals, stage moves, deal → project conversion |
+| PROJECTS | Projects |
+| TASKS | Tasks and task comments |
+| ACTIVITY_LOG | Activity log |
+| TEAM | Team member listing |
+| SETTINGS | Reserved: no settings API route exists yet, so this grant currently gates nothing server-side (the Settings page only changes the caller's own password via the auth route) |
 
-### 2.3 Deals (pipeline, stages, value)
+Levels (`NONE` < `ASSIGNED` < `ALL`):
 
-| Action | Super Admin | Admin | Project Mgr | Sales Exec | Developer | Designer |
-|---|---|---|---|---|---|---|
-| View deals / pipeline board | ● | ● | ◐ (deals linked to assigned projects) | ◐ (own) | ◐ (deals linked to assigned projects) | ◐ (deals linked to assigned projects) |
-| Create deal | ● | ● | — | ● (from own contacts) | — | — |
-| Edit deal (title, value, close date) | ● | ● | — | ◐ (own) | — | — |
-| Move deal stage | ● | ● | — | ◐ (own) | — | — |
-| Reopen Won / Lost deal | ● | ● | — | — | — | — |
-| Mark deal Lost (with reason) | ● | ● | — | ◐ (own) | — | — |
-| Delete / archive deal | ● | ● | — | — | — | — |
-| View pipeline analytics | ● | ● | ◐ (assigned scope) | ◐ (own) | — | — |
+| Level | List | Single record | Create | Edit / delete |
+|---|---|---|---|---|
+| **NONE** | 403 | 403 | 403 | 403 |
+| **ASSIGNED** | Only records in the assigned scope below | 403 if the record exists but is outside scope; 404 only if it does not exist | Allowed, but the record must be assigned to the caller (assignee/owner forced to self; naming someone else is 403) | Only records in scope; reassigning to someone else is 403 |
+| **ALL** | Everything | Everything | Any assignee/owner | Everything |
 
-### 2.4 Meetings
+### What "assigned" means (role-independent)
 
-| Action | Super Admin | Admin | Project Mgr | Sales Exec | Developer | Designer |
-|---|---|---|---|---|---|---|
-| View meetings | ● | ● | ◐ (own / assigned-project) | ◐ (own / attendee) | ◐ (attendee) | ◐ (attendee) |
-| Create meeting | ● | ● | ◐ (for assigned projects/deals) | ● (own contacts/deals) | — | — |
-| Edit / complete meeting, record outcome | ● | ● | ◐ (own) | ◐ (own) | — | — |
-| Cancel meeting | ● | ● | ◐ (own) | ◐ (own) | — | — |
+- **COMPANIES**: company assigned to the user, or a company of a project
+  they manage, develop on, hold a task on, or have a meeting on.
+- **CAMPAIGNS**: campaign owned by the user (`ownerId`).
+- **EMAILS**: email activity assigned to the user (`assignedToId`) only.
+- **FOLLOW_UPS / MEETINGS / DEALS**: record assigned to the user, or a
+  record of a company assigned to the user.
+- **PROJECTS**: project managed by the user, developed on by the user,
+  or holding a task assigned to the user.
+- **TASKS**: task assigned to the user, or a task on a project they
+  manage or develop on.
+- **ACTIVITY_LOG**: actions performed by the user (`actorId`).
+- **TEAM**: the user themselves (list shows only their own row).
+- **TEMPLATES**: templates have no owner, so `ASSIGNED` may **read** the
+  shared library (needed to compose assigned emails) but may **not**
+  create, edit, or delete templates — those require `ALL`.
 
-### 2.5 Projects and tasks (M4)
+### Exceptions (fail-closed, documented)
 
-| Action | Super Admin | Admin | Project Mgr | Sales Exec | Developer | Designer |
-|---|---|---|---|---|---|---|
-| View projects | ● | ● | ◐ (managed / assigned) | ◐ (own won deals' projects, read-only) | ◐ (assigned) | ◐ (assigned) |
-| Create project (from won deal) | ● | ● | ● (assigned deals) | — (request to PM/Admin) | — | — |
-| Edit project (status, dates) | ● | ● | ◐ (managed) | — | — | — |
-| Create task | ● | ● | ◐ (managed projects) | — | — | — |
-| Edit / complete own task | ● | ● | ◐ (managed projects) | — | ◐ (own tasks) | ◐ (own tasks) |
-| Reassign task | ● | ● | ◐ (managed projects) | — | — | — |
-| Delete project / task | ● | ● | — (archive only, via Admin) | — | — | — |
+- **Deletion of companies, contacts, email records, deals, and projects
+  requires `ALL`** in that module, even for a record inside an
+  `ASSIGNED` scope. Follow-ups, meetings, and tasks may be deleted by
+  an in-scope `ASSIGNED` caller (tasks: project manager/developer only,
+  not a mere assignee).
+- **Suppression** has no per-record owner, so the suppression list
+  routes require `EMAILS=ALL`; **removing** a suppression entry stays
+  **Super-Admin-only**, because a mistaken removal re-exposes someone
+  who asked to stop. (Recording an unsubscribe through an email status
+  change still works internally and is not a route.)
+- **Reopening a Won/Lost deal** requires `DEALS=ALL`.
+- **Full project edits** require `PROJECTS=ALL` or being the project
+  manager; a developer who can see a project may not edit it.
+- **Task assignees** may update only their own task's status/progress;
+  full task edits need `TASKS=ALL`, the project manager, or a project
+  developer.
+- **Cross-module references**: creating a follow-up, meeting, deal,
+  project, or email record also requires the referenced company to be
+  visible under the caller's `COMPANIES` grant (and a referenced deal /
+  campaign under its own grant). A `COMPANIES=NONE` caller cannot create
+  records pointing at a company.
+- **Dashboard stats/coverage** are computed per module: a `NONE` module
+  contributes 0 / empty, `ASSIGNED` contributes only assigned rows.
+  A user with no grant at all gets 403 from stats.
+- **Company detail** embeds related lists (emails, follow-ups,
+  meetings, deals, projects); each list is emptied when its module is
+  `NONE`, and its activity timeline follows the `ACTIVITY_LOG` grant
+  (`ASSIGNED` = own actions only).
 
-### 2.6 Users, settings, analytics, audit
+## 3. Examples
 
-| Action | Super Admin | Admin | Project Mgr | Sales Exec | Developer | Designer |
-|---|---|---|---|---|---|---|
-| View user list | ● | ● | — (see teammates on assigned projects only) | — | — | — |
-| Create user / change role / suspend | ● | — | — | — | — | — |
-| Admin changes another Admin's role | — (only Super Admin) | — | — | — | — | — |
-| Edit own profile (name, password) | ● | ● | ● | ● | ● | ● |
-| Edit business settings | ● | ● | — | — | — | — |
-| Edit sending settings (caps, windows, accounts) | ● | ● | — | — | — | — |
-| View dashboard (own scope) | ● | ● | ● (own scope) | ● (own scope) | ● (own scope) | ● (own scope) |
-| View full analytics (all users) | ● | ● | — | — | — | — |
-| Export data (CSV) | ● | ● | — | ◐ (own contacts/deals only) | — | — |
-| View audit log | ● | ● | — | — | — | — |
+**Allow:** A Developer has `EMAILS=ASSIGNED` and an email activity with
+`assignedToId` = that developer. `GET /api/emails/<id>` returns it, and
+the emails list shows it.
 
-## 3. Special rules
+**Block (detail):** The same Developer requests an email activity
+assigned to someone else. The record exists, but it is outside their
+scope, so `GET /api/emails/<id>` returns **403** (not the record, and
+not a misleading 404-for-existing).
 
-1. **Super Admin is not transferable by Admins.** Only a Super Admin can create
-   another Super Admin, change an Admin's role, or remove a suppression entry.
-   There must always be at least one active Super Admin — the API rejects the
-   action that would leave zero.
-2. **Assignment is the default; "view all" is the exception.** If a permission
-   above says ◐, the API scopes the query to assigned records. A Sales Executive
-   asking for another executive's contact by ID gets 403 (or 404 — implementation
-   choice, but never the record). Never leak existence through differing errors
-   in a way that enumerates others' data; 404-for-unauthorised is acceptable and
-   preferred for single-record reads.
-3. **Project membership grants limited sales visibility.** A Developer on a
-   project can see that project's company/contact/deal context (so they can do
-   the work) but cannot edit sales records, enroll contacts, or send email.
-4. **No self-approval.** A user cannot approve their own role change, suppression
-   removal, or Won/Lost reopen — those actions require a different authorised
-   user where the matrix requires one (Super Admin / Admin).
-5. **Suspended users lose everything immediately.** Suspension revokes sessions;
-   a suspended user's API calls fail auth before RBAC is even evaluated.
-6. **Audit covers permission failures too.** Repeated 403s on the same resource
-   are logged (potential probing) and visible to Super Admin / Admin in the audit log.
-7. **Authorisation can be granted per-record, not just per-role, in one case:**
-   an Admin/Super Admin may reassign a record's owner. Reassignment is logged with
-   old/new owner and is the only way an employee gains visibility of a record
-   they did not own — there is no ad-hoc "share this contact" button in v1.
+**Block (module):** The same Developer has `COMPANIES=NONE`. Every
+Companies API route returns **403** for them — list, detail, create,
+contacts, tags, import, and export — regardless of their job title.
 
-## 4. How the scaffold should implement this
+**Allow (title does not matter):** A Designer granted `PROJECTS=ALL`
+sees every project, while a Project Manager granted `PROJECTS=NONE`
+sees none. The title never overrides the grant row.
 
-- A single `lib/rbac.ts` with a `can(actor, action, resource)` function and a
-  `scopeWhere(actor, resource)` helper that returns the Prisma `where` clause
-  for list queries. Every API route calls it first; no route hand-rolls its own
-  permission logic.
-- Permission names mirror this document (e.g. `leads.view`, `campaigns.start`,
-  `deals.move`, `suppression.remove`, `users.manage`) so a future reviewer can
-  diff code against this matrix line by line.
-- Tests (when the scaffold adds them) should cover at minimum: Sales Executive
-  cannot read another executive's contact; Developer cannot send email;
-  non-Super-Admin cannot remove a suppression entry; suspended user cannot log in.
+## 4. Team management (Super Admin only)
+
+Only the Super Admin may:
+
+- list the full team (`TEAM=ALL` members may list only themselves),
+- create users (job titles only; `SUPER_ADMIN`/`ADMIN` rejected),
+- change a member's job title (never to `SUPER_ADMIN`/`ADMIN`) or
+  deactivate/reactivate them,
+- grant permissions via `PUT /api/users/[id]/permissions`
+  (validates module + level, upserts the `PermissionGrant` row, writes
+  an `PERMISSION_GRANTED` audit log entry).
+
+Standing guards are unchanged: a user cannot deactivate their own
+account, and the last active Super Admin cannot be demoted or
+deactivated. Auth routes are unchanged except that change-password
+stays self-only; the seeded Super Admin remains the one Super Admin.
+
+## 5. Special rules (unchanged)
+
+1. **Suspended users lose everything immediately.** A deactivated
+   account fails auth before any permission check.
+2. **Audit covers writes**, including permission grants. Permission
+   failures return 403 without leaking the record.
+3. **No self-approval / no new full-control accounts.** See §1 and §4.
+4. **No email is sent by this app.** Email routes only track records
+   sent elsewhere; this model adds no sending code and no Gmail OAuth.
+
+## 6. Implementation map
+
+- `prisma/schema.prisma` — `PermissionGrant` model,
+  `@@unique([userId, module])`, cascade delete with the user.
+- `src/lib/rbac.ts` — `MODULES`, `PermLevel`, `getPermission`
+  (default `NONE`, Super Admin always `ALL`), `requirePermission`,
+  `requireModuleAccess` / `moduleAccess` (401 vs 403), assigned-scope
+  `where` builders, `isAssignedRecord`. Legacy `can` / `requireRole`
+  remain for unmigrated callers only and must not gate a module route.
+- `src/lib/validation.ts` — `permissionGrantSchema`
+  `{ userId, module, level }`, `memberCreateSchema` /
+  `memberPatchSchema` (job titles only).
+- `src/app/api/companies/_scope.ts` — `*ScopeForLevel` variants
+  (`ALL` = unscoped, `ASSIGNED` = assigned scope, `NONE` = matches
+  nothing); `isPrivileged` now means Super Admin only.
+- `src/app/api/users/[id]/permissions/route.ts` — Super-Admin-only
+  grant read/upsert.
+- `src/app/(dashboard)/team/page.tsx` — Super-Admin-only Team page:
+  member list with job title, job-title-only create form, and a
+  per-member permission table (one control per module).

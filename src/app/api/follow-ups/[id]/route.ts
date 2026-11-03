@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { followUpSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -11,7 +11,8 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api";
-import { canEditLinked, isPrivileged, linkedScope, pickPresent } from "../../companies/_scope";
+import { canEditLinked, linkedScopeForLevel, pickPresent } from "../../companies/_scope";
+import type { PermLevel } from "@/lib/rbac";
 
 const patchSchema = followUpSchema.omit({ companyId: true }).partial();
 
@@ -21,11 +22,17 @@ const INCLUDE = {
   assignedTo: { select: { id: true, name: true, email: true } },
 } as const;
 
-async function visible(user: { id: string; role: string }, id: string) {
-  return prisma.followUp.findFirst({
-    where: { id, AND: [linkedScope(user as never) as never] },
+async function visible(user: { id: string }, id: string, level: PermLevel) {
+  const item = await prisma.followUp.findFirst({
+    where: { id, AND: [linkedScopeForLevel(user as never, level) as never] },
     include: INCLUDE,
   });
+  if (item) return item;
+  const exists = await prisma.followUp.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  return exists ? ("forbidden" as const) : null;
 }
 
 export async function GET(
@@ -33,9 +40,12 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("FOLLOW_UPS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden();
     if (!item) return notFound("Follow-up not found");
     return jsonOk(item);
   });
@@ -46,11 +56,14 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("FOLLOW_UPS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden("You cannot edit this follow-up");
     if (!item) return notFound("Follow-up not found");
-    if (!canEditLinked(user, item))
+    if (level !== "ALL" && !canEditLinked(user, item))
       return forbidden("You cannot edit this follow-up");
     let body: Record<string, unknown>;
     try {
@@ -67,6 +80,8 @@ export async function PATCH(
       );
     }
     const data = pickPresent(body, parsed.data);
+    if (level === "ASSIGNED" && "assignedToId" in data && data.assignedToId !== null && data.assignedToId !== user.id)
+      return forbidden("You may not reassign this follow-up to someone else");
     const clean: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {
       clean[key] = typeof value === "string" ? value.trim() || null : value;
@@ -89,11 +104,14 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("FOLLOW_UPS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden("You cannot delete this follow-up");
     if (!item) return notFound("Follow-up not found");
-    if (!isPrivileged(user) && !canEditLinked(user, item)) {
+    if (level !== "ALL" && !canEditLinked(user, item)) {
       return forbidden("You cannot delete this follow-up");
     }
     await prisma.followUp.delete({ where: { id: item.id } });

@@ -2,12 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   api,
-  btnPrimary,
-  inputCls,
-  selectCls,
-  Field,
+        Field,
   ErrorAlert,
   EMAIL_STATUSES,
   TOKEN_HELP,
@@ -134,12 +134,12 @@ export default function NewEmailPage() {
   return (
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold text-slate-900">Record an email</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-base text-slate-500">
         Tracking only: this records an email that was sent separately through
         Gmail. Nothing here sends an email. If a follow-up date is given, a
         follow-up reminder is created automatically.
       </p>
-      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-base text-slate-600 shadow-sm">
         {TOKEN_HELP}
       </div>
 
@@ -183,15 +183,15 @@ export default function NewEmailPage() {
       >
         <ErrorAlert message={error} />
         <Field label="Search company">
-          <input
+          <Input
             value={companySearch}
             onChange={(e) => setCompanySearch(e.target.value)}
             placeholder="Type to search companies…"
-            className={inputCls}
+           
           />
         </Field>
         <Field label="Company *">
-          <select required value={companyId} onChange={(e) => { setCompanyId(e.target.value); setContactId(""); }} className={selectCls}>
+          <select required value={companyId} onChange={(e) => { setCompanyId(e.target.value); setContactId(""); }} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
             <option value="">Select a company…</option>
             {(lookups?.companies ?? []).map((c) => (
               <option key={c.id} value={c.id}>
@@ -201,7 +201,7 @@ export default function NewEmailPage() {
           </select>
         </Field>
         <Field label="Contact (filtered by company)">
-          <select value={contactId} onChange={(e) => onContactChange(e.target.value)} className={selectCls} disabled={!companyId}>
+          <select value={contactId} onChange={(e) => onContactChange(e.target.value)} disabled={!companyId} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
             <option value="">No contact / not listed</option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>
@@ -211,7 +211,7 @@ export default function NewEmailPage() {
           </select>
         </Field>
         <Field label="Campaign (optional)">
-          <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className={selectCls}>
+          <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
             <option value="">No campaign</option>
             {(lookups?.campaigns ?? []).map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
@@ -219,7 +219,7 @@ export default function NewEmailPage() {
           </select>
         </Field>
         <Field label="Template (optional — prefills subject and body)" hint="Tokens are replaced with the chosen company, contact, and your name.">
-          <select value={templateId} onChange={(e) => onTemplateChange(e.target.value)} className={selectCls}>
+          <select value={templateId} onChange={(e) => onTemplateChange(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
             <option value="">No template</option>
             {(lookups?.templates ?? []).map((t) => (
               <option key={t.id} value={t.id}>
@@ -229,46 +229,46 @@ export default function NewEmailPage() {
           </select>
         </Field>
         <Field label="Recipient email *">
-          <input required type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} className={inputCls} />
+          <Input required type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} />
         </Field>
         <Field label="Sender email account" hint="The email account used to send it, e.g. the Gmail address used. Free text — this app does not connect to that account.">
-          <input type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="you@example.com" className={inputCls} />
+          <Input type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="you@example.com" />
         </Field>
         <Field label="Subject *">
-          <input required value={subject} onChange={(e) => setSubject(e.target.value)} className={inputCls} />
+          <Input required value={subject} onChange={(e) => setSubject(e.target.value)} />
         </Field>
         <Field label="Body *">
-          <textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={8} className={inputCls} />
+          <Textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Date / time sent">
-            <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} className={inputCls} />
+            <Input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
           </Field>
           <Field label="Sequence number">
-            <input type="number" min={1} value={sequenceNumber} onChange={(e) => setSequenceNumber(Number(e.target.value) || 1)} className={inputCls} />
+            <Input type="number" min={1} value={sequenceNumber} onChange={(e) => setSequenceNumber(Number(e.target.value) || 1)} />
           </Field>
           <Field label="Status *">
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectCls}>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
               {EMAIL_STATUSES.map((s) => (
                 <option key={s} value={s}>{s.replaceAll("_", " ")}</option>
               ))}
             </select>
           </Field>
           <Field label="Follow-up date" hint="Creates a follow-up reminder automatically.">
-            <input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} className={inputCls} />
+            <Input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
           </Field>
         </div>
         <Field label="Assigned employee">
-          <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className={selectCls}>
+          <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
             <option value="">Unassigned</option>
             {(lookups?.users ?? []).map((u) => (
               <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
             ))}
           </select>
         </Field>
-        <button type="submit" disabled={saving} className={btnPrimary}>
+        <Button type="submit" disabled={saving} variant="default">
           {saving ? "Recording…" : "Record email"}
-        </button>
+        </Button>
       </form>
     </div>
   );

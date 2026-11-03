@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
@@ -11,8 +11,8 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api";
-import { canEditLinked, dealScope, isPrivileged } from "../../../companies/_scope";
-import { DEAL_INCLUDE } from "../../route";
+import { canEditLinked, dealScopeForLevel } from "../../../companies/_scope";
+import { DEAL_INCLUDE } from "../../_include";
 
 const moveSchema = z.object({
   status: z.enum([
@@ -41,14 +41,20 @@ export async function POST(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("DEALS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const item = await prisma.deal.findFirst({
-      where: { id: params.id, AND: [dealScope(user) as never] },
+      where: { id: params.id, AND: [dealScopeForLevel(user, level) as never] },
       include: DEAL_INCLUDE,
     });
-    if (!item) return notFound("Deal not found");
-    if (!canEditLinked(user, item))
+    if (!item) {
+      const exists = await prisma.deal.findUnique({ where: { id: params.id }, select: { id: true } });
+      if (exists) return forbidden("You cannot move this deal");
+      return notFound("Deal not found");
+    }
+    if (level !== "ALL" && !canEditLinked(user, item))
       return forbidden("You cannot move this deal");
     let body: unknown;
     try {
@@ -70,9 +76,9 @@ export async function POST(
       status !== item.status &&
       status !== "WON" &&
       status !== "LOST" &&
-      !isPrivileged(user)
+      level !== "ALL"
     ) {
-      return forbidden("Only Admin / Super Admin reopen Won or Lost deals");
+      return forbidden("Only users with full deal access reopen Won or Lost deals");
     }
     const finalNotes = (notes ?? "").trim() || item.notes || "";
     if (status === "LOST" && !finalNotes.trim()) {

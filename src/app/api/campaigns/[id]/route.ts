@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess, getPermission } from "@/lib/rbac";
 import {
   handleRoute,
   jsonError,
@@ -12,19 +12,15 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { campaignSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
-import {
-  activityInclude,
-  isAdmin,
-  canManageOutreach,
-} from "@/app/api/emails/shared";
+import { activityInclude } from "@/app/api/emails/shared";
 
-async function loadCampaign(id: string, userId: string, admin: boolean) {
+async function loadCampaign(id: string, userId: string, all: boolean) {
   const campaign = await prisma.campaign.findUnique({
     where: { id },
     include: { owner: { select: { id: true, name: true, email: true } } },
   });
   if (!campaign) return null;
-  if (!admin && campaign.ownerId !== userId) return "forbidden" as const;
+  if (!all && campaign.ownerId !== userId) return "forbidden" as const;
   return campaign;
 }
 
@@ -33,20 +29,31 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const campaign = await loadCampaign(params.id, user.id, isAdmin(user));
+    const access = await moduleAccess("CAMPAIGNS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const campaign = await loadCampaign(params.id, user.id, level === "ALL");
     if (!campaign) return notFound("Campaign not found");
     if (campaign === "forbidden") return forbidden();
 
+    // Campaign activities are email records: hide them when the caller
+    // has no EMAILS access, and scope them to assigned-only for ASSIGNED.
+    const emailsLevel = await getPermission(user.id, "EMAILS");
+    const activityWhere =
+      emailsLevel === "NONE"
+        ? { id: "__no_access__" }
+        : emailsLevel === "ASSIGNED"
+          ? { campaignId: params.id, assignedToId: user.id }
+          : { campaignId: params.id };
     const [counts, activities] = await Promise.all([
       prisma.emailActivity.groupBy({
         by: ["status"],
-        where: { campaignId: params.id },
+        where: activityWhere as never,
         _count: { _all: true },
       }),
       prisma.emailActivity.findMany({
-        where: { campaignId: params.id },
+        where: activityWhere as never,
         orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
         take: 100,
         include: activityInclude,
@@ -70,13 +77,14 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
+    const access = await moduleAccess("CAMPAIGNS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const parsed = await parseBody(request, campaignSchema.partial());
     if ("error" in parsed) return parsed.error;
 
-    const campaign = await loadCampaign(params.id, user.id, isAdmin(user));
+    const campaign = await loadCampaign(params.id, user.id, level === "ALL");
     if (!campaign) return notFound("Campaign not found");
     if (campaign === "forbidden") return forbidden();
 
@@ -84,8 +92,11 @@ export async function PATCH(
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
     if (parsed.data.description !== undefined)
       data.description = parsed.data.description ?? null;
-    // Only admins may reassign ownership.
-    if (parsed.data.ownerId !== undefined && isAdmin(user)) {
+    // Only ALL may reassign ownership; ASSIGNED naming another owner is forbidden.
+    if (parsed.data.ownerId !== undefined && level === "ASSIGNED" && parsed.data.ownerId !== campaign.ownerId) {
+      return forbidden("You may not reassign this campaign");
+    }
+    if (parsed.data.ownerId !== undefined && level === "ALL") {
       if (parsed.data.ownerId) {
         const owner = await prisma.user.findUnique({
           where: { id: parsed.data.ownerId },
@@ -114,10 +125,11 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
-    const campaign = await loadCampaign(params.id, user.id, isAdmin(user));
+    const access = await moduleAccess("CAMPAIGNS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const campaign = await loadCampaign(params.id, user.id, level === "ALL");
     if (!campaign) return notFound("Campaign not found");
     if (campaign === "forbidden") return forbidden();
 

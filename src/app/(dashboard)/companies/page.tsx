@@ -1,7 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type Company = {
   id: string;
@@ -19,12 +28,6 @@ type Company = {
 
 type Assignee = { id: string; name: string; email: string; role: string };
 
-const inputCls =
-  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
-const btnPrimary =
-  "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50";
-const btnSecondary =
-  "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50";
 
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
@@ -222,21 +225,21 @@ export default function CompaniesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Companies</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-base text-slate-500">
             Prospects and clients. Duplicates are blocked on name + website.
           </p>
         </div>
         <div className="flex gap-2">
-          <a href={exportHref} className={btnSecondary}>
+          <a href={exportHref} className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">
             Export CSV
           </a>
-          <button type="button" onClick={() => setShowCreate((v) => !v)} className={btnPrimary}>
+          <Button type="button" onClick={() => setShowCreate((v) => !v)} variant="default">
             {showCreate ? "Hide form" : "Add company"}
-          </button>
+          </Button>
         </div>
       </div>
 
-      <p className="mt-3 text-sm text-slate-500">
+      <p className="mt-3 text-base text-slate-500">
         <Link href="/activity-log" className="text-brand-600 hover:underline">
           View activity log
         </Link>
@@ -248,60 +251,60 @@ export default function CompaniesPage() {
           onSubmit={handleCreate}
           className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
         >
-          <h2 className="text-sm font-semibold text-slate-900">New company</h2>
+          <h2 className="text-base font-semibold text-slate-900">New company</h2>
           {formError && (
-            <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-base text-red-700">
               {formError}
             </p>
           )}
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <label className="text-sm font-medium text-slate-700">
+            <Label className="text-base font-medium text-slate-700">
               Name *
-              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Website
-              <input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://example.com" className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} placeholder="https://example.com" className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Industry
-              <input value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Country
-              <input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               City
-              <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Size
-              <input value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} placeholder="e.g. 11-50" className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} placeholder="e.g. 11-50" className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               LinkedIn URL
-              <input value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Source
-              <input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="LinkedIn, Referral…" className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="LinkedIn, Referral…" className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Status
-              <input value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={`${inputCls} mt-1 font-normal`} />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+              <Input value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="mt-1" />
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Priority
-              <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className={`${inputCls} mt-1 font-normal`}>
+              <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="mt-1 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
                 <option value="LOW">LOW</option>
                 <option value="MEDIUM">MEDIUM</option>
                 <option value="HIGH">HIGH</option>
               </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700">
+            </Label>
+            <Label className="text-base font-medium text-slate-700">
               Assigned to
-              <select value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })} className={`${inputCls} mt-1 font-normal`}>
+              <select value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })} className="mt-1 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
                 <option value="">Unassigned</option>
                 {assignees.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -309,59 +312,59 @@ export default function CompaniesPage() {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+            </Label>
+            <Label className="text-base font-medium text-slate-700 sm:col-span-2">
               Description
-              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className={`${inputCls} mt-1 font-normal`} />
-            </label>
+              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="mt-1" />
+            </Label>
           </div>
-          <button type="submit" disabled={formBusy} className={`${btnPrimary} mt-4`}>
+          <Button type="submit" disabled={formBusy} className={`mt-4`}>
             {formBusy ? "Saving…" : "Create company"}
-          </button>
+          </Button>
         </form>
       )}
 
       <form onSubmit={handleImport} className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Import CSV</h2>
-        <p className="mt-1 text-xs text-slate-500">
+        <h2 className="text-base font-semibold text-slate-900">Import CSV</h2>
+        <p className="mt-1 text-sm text-slate-500">
           Columns: name, website, industry, country, city, size, linkedinUrl, description, source,
           status, priority, contactName, contactEmail, contactJobTitle, contactPhone. Exact
           duplicates are skipped and counted. No email is sent by importing.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input ref={fileRef} type="file" accept=".csv,text/csv" className="text-sm text-slate-700" />
-          <button type="submit" disabled={importBusy} className={btnSecondary}>
+          <input ref={fileRef} type="file" accept=".csv,text/csv" className="text-base text-slate-700" />
+          <Button type="submit" disabled={importBusy} variant="outline">
             {importBusy ? "Importing…" : "Import"}
-          </button>
+          </Button>
         </div>
-        {importResult && <p className="mt-2 text-sm text-slate-700">{importResult}</p>}
+        {importResult && <p className="mt-2 text-base text-slate-700">{importResult}</p>}
       </form>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <input
+        <Input
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
             setPage(1);
           }}
           placeholder="Search name, website, city…"
-          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base"
         />
-        <input value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }} placeholder="Country" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-        <input value={industry} onChange={(e) => { setIndustry(e.target.value); setPage(1); }} placeholder="Industry" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-        <input value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} placeholder="Status" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-        <select value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+        <Input value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }} placeholder="Country" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base" />
+        <Input value={industry} onChange={(e) => { setIndustry(e.target.value); setPage(1); }} placeholder="Industry" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base" />
+        <Input value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} placeholder="Status" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base" />
+        <select value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base">
           <option value="">Any priority</option>
           <option value="LOW">LOW</option>
           <option value="MEDIUM">MEDIUM</option>
           <option value="HIGH">HIGH</option>
         </select>
-        <select value={contacted} onChange={(e) => { setContacted(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+        <select value={contacted} onChange={(e) => { setContacted(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base">
           <option value="">Contacted or not</option>
           <option value="true">Contacted</option>
           <option value="false">Not contacted</option>
         </select>
-        <select value={tag} onChange={(e) => { setTag(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+        <select value={tag} onChange={(e) => { setTag(e.target.value); setPage(1); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-base">
           <option value="">Any tag</option>
           {tags.map((t) => (
             <option key={t.id} value={t.name}>
@@ -372,76 +375,131 @@ export default function CompaniesPage() {
       </div>
 
       {error && (
-        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-base text-red-700">
           {error}
         </p>
       )}
       {loading ? (
-        <p className="mt-4 text-sm text-slate-500">Loading companies…</p>
+        <div className="mt-4 space-y-3" aria-label="Loading companies">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
       ) : items.length === 0 ? (
-        <p className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-          No companies match. Add one above or import a CSV.
-        </p>
+        <Card className="mt-4">
+          <CardContent className="p-6 text-center">
+            <Image
+              src="/images/empty-companies.svg"
+              alt=""
+              width={320}
+              height={220}
+              className="mx-auto h-auto w-full max-w-xs"
+            />
+            <p className="mt-4 text-base text-slate-500">
+              No companies match. Add one above or import a CSV.
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         <>
-          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">Company</th>
-                  <th className="px-3 py-2">Location</th>
-                  <th className="px-3 py-2">Status / Priority</th>
-                  <th className="px-3 py-2">Assigned</th>
-                  <th className="px-3 py-2">Contacts / Emails / Deals</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="mt-4 grid gap-3 md:hidden">
+            {items.map((c) => (
+              <Card key={c.id}>
+                <CardContent className="p-4">
+                  <Link
+                    href={`/companies/${c.id}`}
+                    className="flex min-h-12 items-center text-base font-medium text-brand-600 hover:underline"
+                  >
+                    {c.name}
+                  </Link>
+                  <p className="text-base text-slate-500">
+                    {[c.city, c.country].filter(Boolean).join(", ") || "—"}
+                    {c.industry ? ` · ${c.industry}` : ""}
+                  </p>
+                  <p className="mt-2 flex flex-wrap gap-2">
+                    <Badge>{c.status}</Badge>
+                    <Badge variant="secondary">{c.priority}</Badge>
+                    <Badge variant={c._count.emailActivities > 0 ? "info" : "warning"}>
+                      {c._count.emailActivities > 0 ? "Contacted" : "Not contacted"}
+                    </Badge>
+                  </p>
+                  <p className="mt-2 text-base text-slate-600">
+                    {c.assignedTo?.name ?? "Unassigned"} · {c._count.contacts} contacts ·{" "}
+                    {c._count.emailActivities} emails · {c._count.deals} deals
+                  </p>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="mt-1 px-0 text-red-600"
+                    onClick={() => handleDelete(c)}
+                  >
+                    Delete
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+            <Table className="w-full min-w-[720px] text-left text-base">
+              <TableHeader>
+                <TableRow className="border-b border-slate-200 text-sm uppercase tracking-wide text-slate-500">
+                  <TableHead className="px-3 py-2">Company</TableHead>
+                  <TableHead className="px-3 py-2">Location</TableHead>
+                  <TableHead className="px-3 py-2">Status / Priority</TableHead>
+                  <TableHead className="px-3 py-2">Assigned</TableHead>
+                  <TableHead className="px-3 py-2">Contacts / Emails / Deals</TableHead>
+                  <TableHead className="px-3 py-2">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {items.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-3 py-2">
+                  <TableRow key={c.id} className="border-b border-slate-100 last:border-0">
+                    <TableCell className="px-3 py-2">
                       <Link href={`/companies/${c.id}`} className="font-medium text-brand-600 hover:underline">
                         {c.name}
                       </Link>
-                      <span className="block text-xs text-slate-500">
+                      <span className="block text-sm text-slate-500">
                         {c.website ?? "—"}
                         {c.tags.length > 0 && ` · ${c.tags.map((t) => t.name).join(", ")}`}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-slate-600">
                       {[c.city, c.country].filter(Boolean).join(", ") || "—"}
-                      <span className="block text-xs text-slate-500">{c.industry ?? ""}</span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">
-                      {c.status} / {c.priority}
-                      <span className="block text-xs text-slate-500">
+                      <span className="block text-sm text-slate-500">{c.industry ?? ""}</span>
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-slate-600">
+                      <span className="flex flex-wrap gap-1">
+                        <Badge>{c.status}</Badge>
+                        <Badge variant="secondary">{c.priority}</Badge>
+                      </span>
+                      <span className="block text-sm text-slate-500">
                         {c._count.emailActivities > 0 ? "Contacted" : "Not contacted"}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">{c.assignedTo?.name ?? "—"}</td>
-                    <td className="px-3 py-2 text-slate-600">
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-slate-600">{c.assignedTo?.name ?? "—"}</TableCell>
+                    <TableCell className="px-3 py-2 text-slate-600">
                       {c._count.contacts} / {c._count.emailActivities} / {c._count.deals}
-                    </td>
-                    <td className="px-3 py-2">
-                      <button type="button" onClick={() => handleDelete(c)} className="text-sm font-medium text-red-600 hover:underline">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
+                      <Button type="button" variant="link" onClick={() => handleDelete(c)} className="text-red-600">
                         Delete
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
-          <div className="mt-3 flex items-center gap-2 text-sm">
-            <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} className={btnSecondary}>
+          <div className="mt-3 flex items-center gap-2 text-base">
+            <Button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} variant="outline">
               Previous
-            </button>
+            </Button>
             <span className="text-slate-500">
               Page {page} of {totalPages}
             </span>
-            <button type="button" disabled={page >= totalPages} onClick={() => setPage(page + 1)} className={btnSecondary}>
+            <Button type="button" disabled={page >= totalPages} onClick={() => setPage(page + 1)} variant="outline">
               Next
-            </button>
+            </Button>
           </div>
         </>
       )}

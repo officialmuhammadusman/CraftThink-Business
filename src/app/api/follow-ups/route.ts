@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess, getPermission } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { followUpSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -12,8 +12,8 @@ import {
   unauthorized,
 } from "@/lib/api";
 import {
-  companyScope,
-  linkedScope,
+  companyScopeForLevel,
+  linkedScopeForLevel,
   paginationMeta,
   parsePagination,
 } from "../companies/_scope";
@@ -34,8 +34,10 @@ function dayBounds(date: Date): { start: Date; end: Date } {
 
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("FOLLOW_UPS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const { page, limit, skip } = parsePagination(request);
     const view = params.get("view") ?? "all"; // today | overdue | upcoming | all
@@ -45,7 +47,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const now = new Date();
     const { start, end } = dayBounds(now);
 
-    const and: Record<string, unknown>[] = [linkedScope(user)];
+    const and: Record<string, unknown>[] = [linkedScopeForLevel(user, level)];
     if (view === "today") {
       and.push({ dueDate: { gte: start, lte: end }, status: "PENDING" });
     } else if (view === "overdue") {
@@ -77,22 +79,30 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("FOLLOW_UPS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const parsed = await parseBody(request, followUpSchema);
     if ("error" in parsed) return parsed.error;
     const data = parsed.data;
+    // The company must be visible under the caller's COMPANIES grant.
+    const companiesLevel = await getPermission(user.id, "COMPANIES");
+    if (companiesLevel === "NONE") return forbidden("You have no company access");
     const company = await prisma.company.findFirst({
-      where: { id: data.companyId, AND: [companyScope(user) as never] },
+      where: { id: data.companyId, AND: [companyScopeForLevel(user, companiesLevel) as never] },
       select: { id: true, name: true, assignedToId: true },
     });
-    if (!company) return notFound("Company not found");
-    const isPrivileged =
-      user.role === "SUPER_ADMIN" || user.role === "ADMIN";
-    const ownsCompany = company.assignedToId === user.id;
-    const assignsSelf = !data.assignedToId || data.assignedToId === user.id;
-    if (!isPrivileged && !ownsCompany && !assignsSelf) {
-      return forbidden("You cannot create follow-ups for this company");
+    if (!company) return forbidden("Company is not visible to you");
+    // ASSIGNED creators may only create follow-ups assigned to themselves
+    // unless the company itself is assigned to them.
+    if (
+      level === "ASSIGNED" &&
+      company.assignedToId !== user.id &&
+      data.assignedToId &&
+      data.assignedToId !== user.id
+    ) {
+      return forbidden("You cannot create follow-ups assigned to someone else");
     }
     if (data.contactId) {
       const contact = await prisma.contact.findFirst({

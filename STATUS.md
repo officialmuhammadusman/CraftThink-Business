@@ -22,8 +22,10 @@ Task.startDate, and a new TaskComment model (task, author, body).
   see only projects they are assigned to (developer link or task) and
   only their tasks; a task assignee may update only their own
   status/progress, full edits need admin/PM-manager/project-developer.
-- Team (Super Admin + Admin only, sidebar link hidden for others):
-  list, create with role, deactivate/reactivate, change roles.
+- Team (Super Admin only, sidebar link hidden for others):
+  list, create with job title only, deactivate/reactivate, change job
+  titles, plus the per-member permission table (see Permission model
+  overhaul below).
   passwordHash is never selected or returned; you cannot deactivate
   your own account or remove the last active Super Admin.
 - Settings: any signed-in user changes their own password after
@@ -42,10 +44,11 @@ Next.js on Vercel, API routes cover this workload). Justification in
 docs/prd.md §8 and docs/architecture.md.
 
 ## What works end-to-end (real, from the database, no hardcoded stats)
-- Auth + RBAC: credentials login, secure cookie session, 6 roles
-  (Super Admin, Admin, Project Manager, Sales Executive, Developer,
-  Designer), server-side permission checks + assigned-data-only scoping
-  on every API route, audit log on every write.
+- Auth + RBAC: credentials login, secure cookie session, one Super
+  Admin + job titles (Project Manager, Sales Executive, Developer,
+  Designer), server-side PermissionGrant checks + assigned-data-only
+  scoping on every API route, audit log on every write (see Permission
+  model overhaul below).
 - Dashboard headline = COVERAGE: discovered vs contacted vs
   not-yet-contacted, grouped by country → city → industry; per-business
   timeline (contacted date, emails sent, reply status, follow-up due);
@@ -95,3 +98,32 @@ flow — deliberately absent, since this app sends no email).
    Next 14.2.18 as having a known vulnerability — bump to a patched
    Next 14.x before production if time allows (not done: avoids
    breaking a passing build hours before go-live).
+
+## Permission model overhaul — DONE (no push, no build by this worker)
+
+- New `PermissionGrant` model (`@@unique([userId, module])`, cascade
+  delete): 12 modules (COMPANIES, CAMPAIGNS, TEMPLATES, EMAILS,
+  FOLLOW_UPS, MEETINGS, DEALS, PROJECTS, TASKS, ACTIVITY_LOG, TEAM,
+  SETTINGS), levels NONE / ASSIGNED / ALL, default NONE. Super Admin
+  bypasses everything; job titles grant nothing by themselves.
+- Server-side enforcement on every API route (companies, campaigns,
+  templates, emails, follow-ups, meetings, deals, projects, tasks,
+  suppression, activity log, users/team, dashboard stats/coverage):
+  NONE → 403, ASSIGNED → scoped queries (unassigned detail → 403,
+  not 404), ALL → unscoped. Only the Super Admin creates users,
+  changes roles, or deactivates; creating/changing to SUPER_ADMIN or
+  ADMIN is rejected (403). Self-deactivation and last-Super-Admin
+  guards unchanged. Auth routes unchanged (change-password self-only).
+- Team page rebuilt (Super Admin only): member list with job title,
+  create form offering only the 4 job titles, and a per-member
+  permission table (one No access / Only assigned / All control per
+  module) saved via new Super-Admin-only
+  `PUT /api/users/[id]/permissions`. Note on the page: "Members see
+  only tasks given to them or info shared with them — nothing else."
+- Docs: `docs/rbac-matrix.md` rewritten for the new model. Schema
+  change needs `prisma db push` on deploy (PermissionGrant table);
+  existing users keep working but have NONE everywhere until granted.
+- Verified by this worker: `npx tsc --noEmit` PASSED,
+  `npx next lint` CLEAN. Final `npm run build` is the parent's step
+  (not run here, to avoid lock conflicts). No email-sending code or
+  Gmail OAuth added.

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { btnPrimary, btnSecondary, inputCls, ErrorAlert } from "../ui";
+import { ErrorAlert } from "../ui";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 type Report = {
   imported: number;
@@ -23,13 +25,13 @@ export default function EmailImportPage() {
 
   return (
     <div className="max-w-2xl">
-      <Link href="/emails" className="text-sm text-brand-700 hover:underline">
+      <Link href="/emails" className="text-base text-brand-700 hover:underline">
         ← All tracked emails
       </Link>
       <h1 className="mt-2 text-xl font-semibold text-slate-900">
         Import sent-email records (CSV)
       </h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-base text-slate-500">
         Tracking only: this records emails that were already sent separately
         through Gmail. Importing never sends anything. Missing companies and
         contacts are created automatically; rows for suppressed recipients
@@ -37,9 +39,9 @@ export default function EmailImportPage() {
       </p>
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">CSV columns</h2>
-        <p className="mt-2 break-words text-xs text-slate-600">{COLUMNS}</p>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-600">
+        <h2 className="text-base font-semibold text-slate-900">CSV columns</h2>
+        <p className="mt-2 break-words text-sm text-slate-600">{COLUMNS}</p>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600">
           <li>Required: companyName, recipientEmail (or contactEmail), subject.</li>
           <li>companyWebsite helps match an existing company by name + website.</li>
           <li>status defaults to SENT; must be one of: DRAFT, SCHEDULED, SENT, DELIVERED, BOUNCED, REPLIED, POSITIVE, NEGATIVE, FOLLOW_UP_REQUIRED, UNSUBSCRIBED.</li>
@@ -81,28 +83,28 @@ export default function EmailImportPage() {
         }}
       >
         <ErrorAlert message={error} />
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">CSV file *</span>
+        <Label className="block">
+          <span className="text-base font-medium text-slate-700">CSV file *</span>
           <input
             type="file"
             accept=".csv,text/csv"
             required
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className={`${inputCls} mt-1`}
+            className={`mt-1`}
           />
-        </label>
+        </Label>
         <div className="flex gap-2">
-          <button type="submit" disabled={importing} className={btnPrimary}>
+          <Button type="submit" disabled={importing} variant="default">
             {importing ? "Importing…" : "Import records"}
-          </button>
-          <Link href="/emails" className={btnSecondary}>Back to list</Link>
+          </Button>
+          <Link href="/emails" className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">Back to list</Link>
         </div>
       </form>
 
       {report ? (
         <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Import report</h2>
-          <ul className="mt-3 space-y-2 text-sm">
+          <h2 className="text-base font-semibold text-slate-900">Import report</h2>
+          <ul className="mt-3 space-y-2 text-base">
             <li className="flex justify-between"><span className="text-slate-600">Imported</span><span className="font-medium text-slate-900">{report.imported}</span></li>
             <li className="flex justify-between"><span className="text-slate-600">Skipped — exact duplicates</span><span className="font-medium text-slate-900">{report.skippedDuplicates}</span></li>
             <li className="flex justify-between"><span className="text-slate-600">Skipped — suppressed recipients</span><span className="font-medium text-slate-900">{report.skippedSuppressed}</span></li>
@@ -110,15 +112,15 @@ export default function EmailImportPage() {
           </ul>
           {report.errorRows.length > 0 ? (
             <div className="mt-3">
-              <h3 className="text-sm font-medium text-slate-900">Row errors (first 50)</h3>
-              <ul className="mt-2 space-y-1 text-xs text-slate-600">
+              <h3 className="text-base font-medium text-slate-900">Row errors (first 50)</h3>
+              <ul className="mt-2 space-y-1 text-sm text-slate-600">
                 {report.errorRows.map((r) => (
                   <li key={`${r.row}-${r.message}`}>Row {r.row}: {r.message}</li>
                 ))}
               </ul>
             </div>
           ) : null}
-          <Link href="/emails" className="mt-4 inline-block text-sm text-brand-700 hover:underline">
+          <Link href="/emails" className="mt-4 inline-block text-base text-brand-700 hover:underline">
             View imported records →
           </Link>
         </section>

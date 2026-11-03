@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import {
   handleRoute,
   jsonOk,
@@ -11,15 +11,16 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { templateSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
-import { isAdmin, canManageOutreach } from "@/app/api/emails/shared";
 
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("TEMPLATES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const template = await prisma.emailTemplate.findUnique({
       where: { id: params.id },
     });
@@ -33,9 +34,11 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
+    const access = await moduleAccess("TEMPLATES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    if (level !== "ALL") return forbidden("Only users with full template access may edit templates");
     const parsed = await parseBody(request, templateSchema.partial());
     if ("error" in parsed) return parsed.error;
 
@@ -67,11 +70,13 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    // RBAC matrix: template deletion is Admin-only, so live campaigns
-    // are not broken by a seller deleting a shared template.
-    if (!isAdmin(user)) return forbidden();
+    const access = await moduleAccess("TEMPLATES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    // Template deletion requires ALL, so a member cannot break shared
+    // templates used by others.
+    if (level !== "ALL") return forbidden();
     const existing = await prisma.emailTemplate.findUnique({
       where: { id: params.id },
     });

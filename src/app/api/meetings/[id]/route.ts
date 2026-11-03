@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { meetingSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -11,7 +11,8 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api";
-import { canEditLinked, isPrivileged, meetingScope, pickPresent } from "../../companies/_scope";
+import { canEditLinked, meetingScopeForLevel, pickPresent } from "../../companies/_scope";
+import type { PermLevel } from "@/lib/rbac";
 
 const patchSchema = meetingSchema.omit({ companyId: true }).partial();
 
@@ -21,11 +22,17 @@ const INCLUDE = {
   assignedTo: { select: { id: true, name: true, email: true } },
 } as const;
 
-async function visible(user: { id: string; role: string }, id: string) {
-  return prisma.meeting.findFirst({
-    where: { id, AND: [meetingScope(user as never) as never] },
+async function visible(user: { id: string }, id: string, level: PermLevel) {
+  const item = await prisma.meeting.findFirst({
+    where: { id, AND: [meetingScopeForLevel(user as never, level) as never] },
     include: INCLUDE,
   });
+  if (item) return item;
+  const exists = await prisma.meeting.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  return exists ? ("forbidden" as const) : null;
 }
 
 export async function GET(
@@ -33,9 +40,12 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("MEETINGS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden();
     if (!item) return notFound("Meeting not found");
     return jsonOk(item);
   });
@@ -46,11 +56,14 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("MEETINGS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden("You cannot edit this meeting");
     if (!item) return notFound("Meeting not found");
-    if (!canEditLinked(user, item))
+    if (level !== "ALL" && !canEditLinked(user, item))
       return forbidden("You cannot edit this meeting");
     let body: Record<string, unknown>;
     try {
@@ -90,11 +103,14 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const item = await visible(user, params.id);
+    const access = await moduleAccess("MEETINGS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const item = await visible(user, params.id, level);
+    if (item === "forbidden") return forbidden("You cannot delete this meeting");
     if (!item) return notFound("Meeting not found");
-    if (!isPrivileged(user) && !canEditLinked(user, item)) {
+    if (level !== "ALL" && !canEditLinked(user, item)) {
       return forbidden("You cannot delete this meeting");
     }
     await prisma.meeting.delete({ where: { id: item.id } });

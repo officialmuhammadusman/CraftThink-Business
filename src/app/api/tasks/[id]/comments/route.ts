@@ -1,22 +1,27 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { taskCommentSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
 import {
   handleRoute,
+  forbidden,
   jsonOk,
   notFound,
   parseBody,
   unauthorized,
 } from "@/lib/api";
-import { taskScope } from "../../../companies/_scope";
+import { taskScopeForLevel } from "../../../companies/_scope";
+import type { PermLevel } from "@/lib/rbac";
 
-async function visibleTask(user: { id: string; role: string }, id: string) {
-  return prisma.task.findFirst({
-    where: { id, AND: [taskScope(user as never) as never] },
+async function visibleTask(user: { id: string }, id: string, level: PermLevel) {
+  const task = await prisma.task.findFirst({
+    where: { id, AND: [taskScopeForLevel(user as never, level) as never] },
     select: { id: true, projectId: true, title: true },
   });
+  if (task) return task;
+  const exists = await prisma.task.findUnique({ where: { id }, select: { id: true } });
+  return exists ? ("forbidden" as const) : null;
 }
 
 export async function GET(
@@ -24,9 +29,12 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const task = await visibleTask(user, params.id);
+    const access = await moduleAccess("TASKS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const task = await visibleTask(user, params.id, level);
+    if (task === "forbidden") return forbidden();
     if (!task) return notFound("Task not found");
     const items = await prisma.taskComment.findMany({
       where: { taskId: task.id },
@@ -42,9 +50,12 @@ export async function POST(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const task = await visibleTask(user, params.id);
+    const access = await moduleAccess("TASKS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const task = await visibleTask(user, params.id, level);
+    if (task === "forbidden") return forbidden();
     if (!task) return notFound("Task not found");
     const parsed = await parseBody(request, taskCommentSchema);
     if ("error" in parsed) return parsed.error;

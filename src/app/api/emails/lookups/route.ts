@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
-import { handleRoute, jsonOk, unauthorized } from "@/lib/api";
+import { moduleAccess, getPermission } from "@/lib/rbac";
+import { forbidden, handleRoute, jsonOk, unauthorized } from "@/lib/api";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/app/api/emails/shared";
 
 /**
  * Lookup data for the fast-entry form and list filters. Scoped the same
@@ -13,12 +12,14 @@ import { isAdmin } from "@/app/api/emails/shared";
  */
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
     const params = new URL(request.url).searchParams;
     const companyId = params.get("companyId") ?? "";
     const search = params.get("search")?.trim() ?? "";
-    const admin = isAdmin(user);
+    const admin = level === "ALL";
 
     const companyWhere: Prisma.CompanyWhereInput = {};
     if (!admin) companyWhere.assignedToId = user.id;
@@ -56,6 +57,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const campaignWhere: Prisma.CampaignWhereInput = {};
     if (!admin) campaignWhere.ownerId = user.id;
+    const templatesLevel = await getPermission(user.id, "TEMPLATES");
     const [campaigns, templates, users] = await Promise.all([
       prisma.campaign.findMany({
         where: campaignWhere,
@@ -63,11 +65,13 @@ export async function GET(request: Request): Promise<NextResponse> {
         take: 100,
         select: { id: true, name: true },
       }),
-      prisma.emailTemplate.findMany({
-        orderBy: { name: "asc" },
-        take: 100,
-        select: { id: true, name: true, industry: true, subject: true, body: true },
-      }),
+      templatesLevel === "NONE"
+        ? Promise.resolve([])
+        : prisma.emailTemplate.findMany({
+            orderBy: { name: "asc" },
+            take: 100,
+            select: { id: true, name: true, industry: true, subject: true, body: true },
+          }),
       admin
         ? prisma.user.findMany({
             where: { active: true },

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { contactSchema } from "@/lib/validation";
 import { prisma } from "@/lib/prisma";
@@ -12,17 +12,28 @@ import {
   unauthorized,
 } from "@/lib/api";
 import {
-  canCreateLead,
-  canEditLead,
-  companyScope,
+  companyScopeForLevel,
   findDuplicateContact,
 } from "../../_scope";
+import type { PermLevel } from "@/lib/rbac";
 
-async function visibleCompany(user: { id: string; role: string }, companyId: string) {
+async function visibleCompany(
+  user: { id: string },
+  companyId: string,
+  level: PermLevel,
+) {
   return prisma.company.findFirst({
-    where: { id: companyId, AND: [companyScope(user as never) as never] },
+    where: { id: companyId, AND: [companyScopeForLevel(user as never, level) as never] },
     select: { id: true, name: true, assignedToId: true },
   });
+}
+
+async function companyForbidden(companyId: string): Promise<boolean> {
+  const exists = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { id: true },
+  });
+  return Boolean(exists);
 }
 
 export async function GET(
@@ -30,10 +41,15 @@ export async function GET(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const company = await visibleCompany(user, params.id);
-    if (!company) return notFound("Company not found");
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const company = await visibleCompany(user, params.id, level);
+    if (!company) {
+      if (await companyForbidden(params.id)) return forbidden();
+      return notFound("Company not found");
+    }
     const contacts = await prisma.contact.findMany({
       where: { companyId: company.id },
       orderBy: { createdAt: "asc" },
@@ -47,12 +63,14 @@ export async function POST(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    const company = await visibleCompany(user, params.id);
-    if (!company) return notFound("Company not found");
-    if (!canCreateLead(user) || !canEditLead(user, company)) {
-      return forbidden("You cannot add contacts to this company");
+    const access = await moduleAccess("COMPANIES");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const company = await visibleCompany(user, params.id, level);
+    if (!company) {
+      if (await companyForbidden(params.id)) return forbidden("You cannot add contacts to this company");
+      return notFound("Company not found");
     }
     const parsed = await parseBody(
       request,

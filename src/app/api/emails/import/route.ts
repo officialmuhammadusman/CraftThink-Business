@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { EmailStatus } from "@prisma/client";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import {
   handleRoute,
   jsonError,
@@ -11,8 +11,6 @@ import {
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
-  isAdmin,
-  canManageOutreach,
   normalizeEmail,
   syncFollowUpForActivity,
   EMAIL_STATUSES,
@@ -42,10 +40,11 @@ function parseDateCell(value: string): Date | null | "invalid" {
  */
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
-    const admin = isAdmin(user);
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    const admin = level === "ALL";
 
     let formData: FormData;
     try {

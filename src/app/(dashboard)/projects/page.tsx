@@ -1,6 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 type Project = {
   id: string;
@@ -32,12 +38,6 @@ const STATUSES = [
   "CANCELLED",
 ];
 
-const inputCls =
-  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
-const btnPrimary =
-  "rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50";
-const btnSecondary =
-  "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50";
 
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
@@ -194,16 +194,16 @@ export default function ProjectsPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-slate-900">Projects</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-base text-slate-500">
         Active work after a deal is won. Developers and designers only see
         projects they are assigned to.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <label className="text-sm text-slate-600">
+        <Label className="text-base text-slate-600">
           Status{" "}
           <select
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+            className="min-h-12 rounded-md border border-slate-300 bg-white px-2 py-1 text-base"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -212,7 +212,7 @@ export default function ProjectsPage() {
               <option key={s} value={s}>{s.replaceAll("_", " ")}</option>
             ))}
           </select>
-        </label>
+        </Label>
       </div>
 
       {canCreate && (
@@ -221,115 +221,120 @@ export default function ProjectsPage() {
             {editingId ? "Edit project" : "New project"}
           </h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm text-slate-600">
+            <Label className="text-base text-slate-600">
               Client company
-              <select className={inputCls} value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value })}>
+              <select className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base" value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value })}>
                 <option value="">Select a company</option>
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-            </label>
-            <label className="text-sm text-slate-600">
+            </Label>
+            <Label className="text-base text-slate-600">
               Project name
-              <input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </label>
-            <label className="text-sm text-slate-600">
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </Label>
+            <Label className="text-base text-slate-600">
               Status
-              <select className={inputCls} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <select className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>{s.replaceAll("_", " ")}</option>
                 ))}
               </select>
-            </label>
-            <label className="text-sm text-slate-600">
+            </Label>
+            <Label className="text-base text-slate-600">
               Project manager
-              <select className={inputCls} value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })}>
+              <select className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base" value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })}>
                 <option value="">None (admins may leave empty)</option>
                 {assignees.map((a) => (
                   <option key={a.id} value={a.id}>{a.name} — {a.role.replaceAll("_", " ")}</option>
                 ))}
               </select>
-            </label>
-            <label className="text-sm text-slate-600">
+            </Label>
+            <Label className="text-base text-slate-600">
               Budget (USD)
-              <input className={inputCls} type="number" min="0" step="0.01" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} />
-            </label>
-            <label className="text-sm text-slate-600">
+              <Input type="number" min="0" step="0.01" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} />
+            </Label>
+            <Label className="text-base text-slate-600">
               Technology stack (comma separated)
-              <input className={inputCls} value={form.techStack} onChange={(e) => setForm({ ...form, techStack: e.target.value })} placeholder="Next.js, Node.js, PostgreSQL" />
-            </label>
-            <label className="text-sm text-slate-600">
+              <Input value={form.techStack} onChange={(e) => setForm({ ...form, techStack: e.target.value })} placeholder="Next.js, Node.js, PostgreSQL" />
+            </Label>
+            <Label className="text-base text-slate-600">
               Start date
-              <input className={inputCls} type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-            </label>
-            <label className="text-sm text-slate-600">
+              <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+            </Label>
+            <Label className="text-base text-slate-600">
               Deadline
-              <input className={inputCls} type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
-            </label>
-            <label className="text-sm text-slate-600 sm:col-span-2">
+              <Input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+            </Label>
+            <Label className="text-base text-slate-600 sm:col-span-2">
               Description
-              <textarea className={inputCls} rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </label>
-            <label className="text-sm text-slate-600 sm:col-span-2">
+              <Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </Label>
+            <Label className="text-base text-slate-600 sm:col-span-2">
               Requirements
-              <textarea className={inputCls} rows={2} value={form.requirements} onChange={(e) => setForm({ ...form, requirements: e.target.value })} />
-            </label>
-            <label className="text-sm text-slate-600 sm:col-span-2">
+              <Textarea rows={2} value={form.requirements} onChange={(e) => setForm({ ...form, requirements: e.target.value })} />
+            </Label>
+            <Label className="text-base text-slate-600 sm:col-span-2">
               Internal notes (team only, never shown to clients)
-              <textarea className={inputCls} rows={2} value={form.internalNotes} onChange={(e) => setForm({ ...form, internalNotes: e.target.value })} />
-            </label>
+              <Textarea rows={2} value={form.internalNotes} onChange={(e) => setForm({ ...form, internalNotes: e.target.value })} />
+            </Label>
           </div>
           <fieldset className="mt-3">
-            <legend className="text-sm text-slate-600">Assigned developers / designers</legend>
+            <legend className="text-base text-slate-600">Assigned developers / designers</legend>
             <div className="mt-1 flex flex-wrap gap-2">
               {assignees.filter((a) => a.role === "DEVELOPER" || a.role === "DESIGNER" || a.role === "PROJECT_MANAGER").map((a) => (
-                <label key={a.id} className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-700">
+                <Label key={a.id} className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-base text-slate-700">
                   <input type="checkbox" checked={form.developerIds.includes(a.id)} onChange={() => toggleDeveloper(a.id)} />
                   {a.name}
-                </label>
+                </Label>
               ))}
-              {assignees.length === 0 && <p className="text-sm text-slate-400">No team members available yet — add them on the Team page.</p>}
+              {assignees.length === 0 && <p className="text-base text-slate-400">No team members available yet — add them on the Team page.</p>}
             </div>
           </fieldset>
           <div className="mt-4 flex gap-2">
-            <button className={btnPrimary} type="submit">{editingId ? "Save changes" : "Create project"}</button>
-            {editingId && <button className={btnSecondary} type="button" onClick={resetForm}>Cancel</button>}
+            <Button variant="default" type="submit">{editingId ? "Save changes" : "Create project"}</Button>
+            {editingId && <Button variant="outline" type="button" onClick={resetForm}>Cancel</Button>}
           </div>
-          {notice && <p className="mt-2 text-sm text-slate-600">{notice}</p>}
+          {notice && <p className="mt-2 text-base text-slate-600">{notice}</p>}
         </form>
       )}
 
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-      {loading && <p className="mt-4 text-sm text-slate-500">Loading projects…</p>}
+      {error && <p className="mt-4 text-base text-red-600">{error}</p>}
+      {loading && <p className="mt-4 text-base text-slate-500">Loading projects…</p>}
       {!loading && items.length === 0 && !error && (
-        <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-          No projects yet. Convert a WON deal from the Deals page, or create a project above.
-        </p>
+        <Card className="mt-4">
+          <CardContent className="p-6 text-center">
+            <Image src="/images/empty-projects.svg" alt="" width={320} height={220} className="mx-auto h-auto w-full max-w-xs" />
+            <p className="mt-4 text-base text-slate-500">
+              No projects yet. Convert a WON deal from the Deals page, or create a project above.
+            </p>
+          </CardContent>
+        </Card>
       )}
       <div className="mt-4 grid gap-4">
         {items.map((item) => (
-          <article key={item.id} className="rounded-lg border border-slate-200 bg-white p-4">
+          <Card key={item.id}><CardContent className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <a href={`/projects/${item.id}`} className="text-base font-semibold text-brand-700 hover:underline">{item.name}</a>
-                <p className="text-sm text-slate-500">
+                <p className="text-base text-slate-500">
                   {item.company.name} · {item.status.replaceAll("_", " ")} · {item._count.tasks} tasks
                   {item.manager ? ` · Managed by ${item.manager.name}` : ""}
                   {item.budget != null ? ` · Budget $${item.budget}` : ""}
                 </p>
-                {item.techStack.length > 0 && <p className="mt-1 text-sm text-slate-600">{item.techStack.join(", ")}</p>}
+                {item.techStack.length > 0 && <p className="mt-1 text-base text-slate-600">{item.techStack.join(", ")}</p>}
                 {item.developers.length > 0 && (
-                  <p className="mt-1 text-sm text-slate-600">Team: {item.developers.map((d) => d.name).join(", ")}</p>
+                  <p className="mt-1 text-base text-slate-600">Team: {item.developers.map((d) => d.name).join(", ")}</p>
                 )}
-                {item.deadline && <p className="mt-1 text-sm text-slate-600">Deadline: {item.deadline.slice(0, 10)}</p>}
+                {item.deadline && <p className="mt-1 text-base text-slate-600">Deadline: {item.deadline.slice(0, 10)}</p>}
               </div>
               <div className="flex gap-2">
-                {(canCreate) && <button className={btnSecondary} onClick={() => startEdit(item)}>Edit</button>}
-                {canDelete && <button className={btnSecondary} onClick={() => handleDelete(item)}>Delete</button>}
+                {(canCreate) && <Button variant="outline" onClick={() => startEdit(item)}>Edit</Button>}
+                {canDelete && <Button variant="outline" onClick={() => handleDelete(item)}>Delete</Button>}
               </div>
             </div>
-          </article>
+          </CardContent></Card>
         ))}
       </div>
     </div>

@@ -1,14 +1,17 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   api,
-  btnPrimary,
-  btnSecondary,
-  inputCls,
-  selectCls,
-  ErrorAlert,
+          ErrorAlert,
   StatusBadge,
   EMAIL_STATUSES,
   TERMINAL_STATUSES,
@@ -94,16 +97,16 @@ export default function EmailsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Tracked emails</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-base text-slate-500">
             Records of emails sent separately elsewhere. This list tracks
             them — it does not send anything.
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/emails/import" className={btnSecondary}>
+          <Link href="/emails/import" className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">
             Import CSV
           </Link>
-          <Link href="/emails/new" className={btnPrimary}>
+          <Link href="/emails/new" className="inline-flex min-h-12 items-center rounded-md bg-brand-600 px-4 py-3 text-base font-medium text-white hover:bg-brand-700">
             Record an email
           </Link>
         </div>
@@ -117,63 +120,63 @@ export default function EmailsPage() {
           setApplied(filters);
         }}
       >
-        <label className="block text-sm font-medium text-slate-700">
+        <Label className="block text-base font-medium text-slate-700">
           Search
-          <input value={filters.search} onChange={(e) => set("search", e.target.value)} placeholder="Subject, recipient, company…" className={`${inputCls} mt-1`} />
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
+          <Input value={filters.search} onChange={(e) => set("search", e.target.value)} placeholder="Subject, recipient, company…" className={`mt-1`} />
+        </Label>
+        <Label className="block text-base font-medium text-slate-700">
           Status
-          <select value={filters.status} onChange={(e) => set("status", e.target.value)} className={`${selectCls} mt-1`}>
+          <select value={filters.status} onChange={(e) => set("status", e.target.value)} className="mt-1 min-h-12 w-full rounded-md border border-slate-300 bg-white px-3 py-3 text-base">
             <option value="">All statuses</option>
             {EMAIL_STATUSES.map((s) => (
               <option key={s} value={s}>{statusLabel(s)}</option>
             ))}
           </select>
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
+        </Label>
+        <Label className="block text-base font-medium text-slate-700">
           Campaign
-          <select value={filters.campaignId} onChange={(e) => set("campaignId", e.target.value)} className={`${selectCls} mt-1`}>
+          <select value={filters.campaignId} onChange={(e) => set("campaignId", e.target.value)} className={`mt-1`}>
             <option value="">All campaigns</option>
             {(data?.filters.campaigns ?? []).map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
+        </Label>
+        <Label className="block text-base font-medium text-slate-700">
           Company
-          <select value={filters.companyId} onChange={(e) => set("companyId", e.target.value)} className={`${selectCls} mt-1`}>
+          <select value={filters.companyId} onChange={(e) => set("companyId", e.target.value)} className={`mt-1`}>
             <option value="">All companies</option>
             {(data?.filters.companies ?? []).map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
+        </Label>
+        <Label className="block text-base font-medium text-slate-700">
           Assigned to
-          <select value={filters.assignedToId} onChange={(e) => set("assignedToId", e.target.value)} className={`${selectCls} mt-1`}>
+          <select value={filters.assignedToId} onChange={(e) => set("assignedToId", e.target.value)} className={`mt-1`}>
             <option value="">Anyone</option>
             {(data?.filters.users ?? []).map((u) => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
+        </Label>
+        <Label className="block text-base font-medium text-slate-700">
           Sent from
-          <input type="date" value={filters.from} onChange={(e) => set("from", e.target.value)} className={`${inputCls} mt-1`} />
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
+          <Input type="date" value={filters.from} onChange={(e) => set("from", e.target.value)} className={`mt-1`} />
+        </Label>
+        <Label className="block text-base font-medium text-slate-700">
           Sent to
-          <input type="date" value={filters.to} onChange={(e) => set("to", e.target.value)} className={`${inputCls} mt-1`} />
-        </label>
-        <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
+          <Input type="date" value={filters.to} onChange={(e) => set("to", e.target.value)} className={`mt-1`} />
+        </Label>
+        <Label className="flex items-end gap-2 pb-2 text-base text-slate-700">
           <input type="checkbox" checked={filters.followUpsDue} onChange={(e) => set("followUpsDue", e.target.checked)} />
           Follow-ups due (follow-up date ≤ today, no reply/bounce/unsubscribe)
-        </label>
+        </Label>
         <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
-          <button type="submit" className={btnPrimary}>Apply filters</button>
-          <button
+          <Button type="submit" variant="default">Apply filters</Button>
+          <Button
             type="button"
-            className={btnSecondary}
+            variant="outline"
             onClick={() => {
               setFilters(EMPTY);
               setApplied(EMPTY);
@@ -181,51 +184,92 @@ export default function EmailsPage() {
             }}
           >
             Clear
-          </button>
+          </Button>
         </div>
       </form>
 
       <div className="mt-4">
         <ErrorAlert message={error} />
         {loading ? (
-          <p className="text-sm text-slate-500">Loading emails…</p>
+          <div className="space-y-3" aria-label="Loading emails">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
         ) : !data || data.items.length === 0 ? (
-          <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-            No tracked emails match these filters. Record the first one, or
-            import sent-email records from CSV.
-          </p>
+          <Card>
+            <CardContent className="p-6 text-center">
+              <Image
+                src="/images/empty-emails.svg"
+                alt=""
+                width={320}
+                height={220}
+                className="mx-auto h-auto w-full max-w-xs"
+              />
+              <p className="mt-4 text-base text-slate-500">
+                No tracked emails match these filters. Record the first one, or
+                import sent-email records from CSV.
+              </p>
+            </CardContent>
+          </Card>
         ) : (
           <>
-            <p className="text-xs text-slate-500">{data.total} record(s)</p>
-            <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-              <table className="w-full min-w-[820px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-3 py-2">Subject</th>
-                    <th className="px-3 py-2">Recipient</th>
-                    <th className="px-3 py-2">Company / Campaign</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Sent</th>
-                    <th className="px-3 py-2">Follow-up</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <p className="text-sm text-slate-500">{data.total} record(s)</p>
+            <div className="mt-3 grid gap-3 md:hidden">
+              {data.items.map((item) => (
+                <Card key={item.id}>
+                  <CardContent className="p-4">
+                    <Link
+                      href={`/emails/${item.id}`}
+                      className="flex min-h-12 items-center text-base font-medium text-brand-700 hover:underline"
+                    >
+                      {item.subject}
+                    </Link>
+                    <p className="text-base text-slate-600">{item.recipientEmail}</p>
+                    <p className="text-base text-slate-500">
+                      {item.company.name}
+                      {item.campaign ? ` · ${item.campaign.name}` : " · No campaign"}
+                    </p>
+                    <p className="mt-2">
+                      <StatusBadge status={item.status} suppressed={item.suppressed} />
+                    </p>
+                    <p className="mt-2 text-base text-slate-500">
+                      Sent {fmtDateTime(item.sentAt)}
+                      {item.followUpDate ? ` · Follow-up ${fmtDate(item.followUpDate)}${isDue(item) ? " — due" : ""}` : ""}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="mt-3 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+              <Table className="w-full min-w-[820px] text-left text-base">
+                <TableHeader>
+                  <TableRow className="border-b border-slate-200 text-sm uppercase tracking-wide text-slate-500">
+                    <TableHead className="px-3 py-2">Subject</TableHead>
+                    <TableHead className="px-3 py-2">Recipient</TableHead>
+                    <TableHead className="px-3 py-2">Company / Campaign</TableHead>
+                    <TableHead className="px-3 py-2">Status</TableHead>
+                    <TableHead className="px-3 py-2">Sent</TableHead>
+                    <TableHead className="px-3 py-2">Follow-up</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {data.items.map((item) => (
-                    <tr key={item.id} className="border-b border-slate-100 last:border-0">
-                      <td className="px-3 py-2">
+                    <TableRow key={item.id} className="border-b border-slate-100 last:border-0">
+                      <TableCell className="px-3 py-2">
                         <Link href={`/emails/${item.id}`} className="font-medium text-brand-700 hover:underline">
                           {item.subject}
                         </Link>
-                        <span className="block text-xs text-slate-500">#{item.sequenceNumber} · {item.contact?.fullName ?? "No contact"}</span>
-                      </td>
-                      <td className="px-3 py-2">{item.recipientEmail}</td>
-                      <td className="px-3 py-2">
+                        <span className="block text-sm text-slate-500">#{item.sequenceNumber} · {item.contact?.fullName ?? "No contact"}</span>
+                      </TableCell>
+                      <TableCell className="px-3 py-2">{item.recipientEmail}</TableCell>
+                      <TableCell className="px-3 py-2">
                         {item.company.name}
-                        <span className="block text-xs text-slate-500">{item.campaign?.name ?? "No campaign"}</span>
-                      </td>
-                      <td className="px-3 py-2"><StatusBadge status={item.status} suppressed={item.suppressed} /></td>
-                      <td className="px-3 py-2">{fmtDateTime(item.sentAt)}</td>
-                      <td className="px-3 py-2">
+                        <span className="block text-sm text-slate-500">{item.campaign?.name ?? "No campaign"}</span>
+                      </TableCell>
+                      <TableCell className="px-3 py-2"><StatusBadge status={item.status} suppressed={item.suppressed} /></TableCell>
+                      <TableCell className="px-3 py-2">{fmtDateTime(item.sentAt)}</TableCell>
+                      <TableCell className="px-3 py-2">
                         {item.followUpDate ? (
                           <span className={isDue(item) ? "font-medium text-amber-700" : ""}>
                             {fmtDate(item.followUpDate)}
@@ -234,20 +278,20 @@ export default function EmailsPage() {
                         ) : (
                           "—"
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm disabled:opacity-50">
+              <Button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} variant="outline">
                 Previous
-              </button>
-              <span className="text-sm text-slate-500">Page {page} of {data.totalPages}</span>
-              <button type="button" disabled={page >= data.totalPages} onClick={() => setPage(page + 1)} className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm disabled:opacity-50">
+              </Button>
+              <span className="text-base text-slate-500">Page {page} of {data.totalPages}</span>
+              <Button type="button" disabled={page >= data.totalPages} onClick={() => setPage(page + 1)} variant="outline">
                 Next
-              </button>
+              </Button>
             </div>
           </>
         )}

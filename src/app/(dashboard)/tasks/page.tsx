@@ -1,6 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 type Task = {
   id: string;
@@ -17,8 +20,6 @@ type Task = {
 
 const TASK_STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
 
-const btnSecondary =
-  "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50";
 
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
@@ -79,15 +80,15 @@ export default function TasksPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-slate-900">Tasks</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-base text-slate-500">
         Every task you may see. Developers and designers only see tasks on
         their own projects, or assigned directly to them.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <label className="text-sm text-slate-600">
+        <Label className="text-base text-slate-600">
           Status{" "}
           <select
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+            className="min-h-12 rounded-md border border-slate-300 bg-white px-2 py-1 text-base"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -96,48 +97,51 @@ export default function TasksPage() {
               <option key={s} value={s}>{s.replaceAll("_", " ")}</option>
             ))}
           </select>
-        </label>
-        <label className="flex items-center gap-1 text-sm text-slate-600">
+        </Label>
+        <Label className="flex items-center gap-1 text-base text-slate-600">
           <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />
           Assigned to me only
-        </label>
+        </Label>
       </div>
-      {notice && <p className="mt-3 text-sm text-slate-600">{notice}</p>}
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-      {loading && <p className="mt-4 text-sm text-slate-500">Loading tasks…</p>}
+      {notice && <p className="mt-3 text-base text-slate-600">{notice}</p>}
+      {error && <p className="mt-4 text-base text-red-600">{error}</p>}
+      {loading && <p className="mt-4 text-base text-slate-500">Loading tasks…</p>}
       {!loading && items.length === 0 && !error && (
-        <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-          No tasks match this filter.
-        </p>
+        <Card className="mt-4">
+          <CardContent className="p-6 text-center">
+            <Image src="/images/empty-generic.svg" alt="" width={320} height={220} className="mx-auto h-auto w-full max-w-xs" />
+            <p className="mt-4 text-base text-slate-500">No tasks match this filter.</p>
+          </CardContent>
+        </Card>
       )}
       <div className="mt-4 grid gap-4">
         {items.map((task) => (
-          <article key={task.id} className="rounded-lg border border-slate-200 bg-white p-4">
+          <Card key={task.id}><CardContent className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <a href={`/projects/${task.project.id}`} className="text-base font-semibold text-brand-700 hover:underline">
                   {task.title}
                 </a>
-                <p className="text-sm text-slate-500">
+                <p className="text-base text-slate-500">
                   {task.project.name} · {task.status.replaceAll("_", " ")} · {task.priority} · {task.progress}%
                   {task.assignedTo ? ` · ${task.assignedTo.name}` : " · Unassigned"}
                   {task.deadline ? ` · Due ${task.deadline.slice(0, 10)}` : ""}
                   {` · ${task._count.comments} comments`}
                 </p>
-                {task.description && <p className="mt-1 text-sm text-slate-700">{task.description}</p>}
+                {task.description && <p className="mt-1 text-base text-slate-700">{task.description}</p>}
               </div>
               <div className="flex gap-2">
                 <select
-                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+                  className="min-h-12 rounded-md border border-slate-300 bg-white px-2 py-1 text-base"
                   value={task.status}
                   onChange={(e) => quickUpdate(task, { status: e.target.value })}
                 >
                   {TASK_STATUSES.map((s) => (<option key={s} value={s}>{s.replaceAll("_", " ")}</option>))}
                 </select>
-                <a href={`/projects/${task.project.id}`} className={btnSecondary}>Open project</a>
+                <a href={`/projects/${task.project.id}`} className="inline-flex min-h-12 items-center rounded-md border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-700 hover:bg-slate-100">Open project</a>
               </div>
             </div>
-          </article>
+          </CardContent></Card>
         ))}
       </div>
     </div>

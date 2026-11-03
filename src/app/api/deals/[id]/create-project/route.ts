@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess, getPermission } from "@/lib/rbac";
 import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
@@ -11,7 +11,7 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api";
-import { dealScope, isPrivileged } from "../../../companies/_scope";
+import { dealScopeForLevel } from "../../../companies/_scope";
 
 const bodySchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
@@ -30,19 +30,25 @@ export async function POST(
   { params }: { params: { id: string } },
 ): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("DEALS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    // Conversion needs both DEALS access to the deal and PROJECTS access
+    // to create the project.
+    const projectsLevel = await getPermission(user.id, "PROJECTS");
+    if (projectsLevel === "NONE") return forbidden("You have no project access");
     const deal = await prisma.deal.findFirst({
-      where: { id: params.id, AND: [dealScope(user) as never] },
+      where: { id: params.id, AND: [dealScopeForLevel(user, level) as never] },
       include: { projects: true },
     });
-    if (!deal) return notFound("Deal not found");
-    const mayConvert =
-      isPrivileged(user) ||
-      user.role === "PROJECT_MANAGER" ||
-      deal.assignedToId === user.id;
-    if (!mayConvert) {
-      return forbidden("Only Admins, Project Managers or the deal owner convert a deal");
+    if (!deal) {
+      const exists = await prisma.deal.findUnique({ where: { id: params.id }, select: { id: true } });
+      if (exists) return forbidden("You cannot convert this deal");
+      return notFound("Deal not found");
+    }
+    if (level !== "ALL" && deal.assignedToId !== user.id) {
+      return forbidden("You may only convert deals assigned to you");
     }
     if (deal.status !== "WON") {
       return jsonError("Only a WON deal can be converted into a project", 409);
@@ -71,6 +77,9 @@ export async function POST(
         422,
       );
     }
+    if (projectsLevel === "ASSIGNED" && parsed.data.managerId?.trim() && parsed.data.managerId.trim() !== user.id) {
+      return forbidden("You may only create projects managed by yourself");
+    }
     const project = await prisma.project.create({
       data: {
         dealId: deal.id,
@@ -80,7 +89,7 @@ export async function POST(
         budget: deal.finalPrice ?? deal.estimatedBudget ?? null,
         managerId:
           parsed.data.managerId?.trim() ||
-          (user.role === "PROJECT_MANAGER" ? user.id : null) ||
+          (projectsLevel === "ASSIGNED" ? user.id : null) ||
           deal.assignedToId ||
           null,
         status: "PLANNING",

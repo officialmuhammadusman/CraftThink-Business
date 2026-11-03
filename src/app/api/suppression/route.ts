@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/rbac";
+import { moduleAccess } from "@/lib/rbac";
 import {
   handleRoute,
   jsonError,
@@ -15,18 +15,20 @@ import {
   parsePagination,
   paginationMeta,
   normalizeEmail,
-  canManageOutreach,
   suppressionSchema,
 } from "@/app/api/emails/shared";
 
-// List: every signed-in user may check the list (the enforcement that
-// matters — import skip and unsubscribe handling — is server-side).
-// Adding is allowed for Super Admin, Admin, and Sales Executive
-// (recording an unsubscribe/bounce for their own contacts).
+// Suppression is a global, unowned list: it cannot be scoped to
+// assigned records, so the whole list (read + write) requires
+// EMAILS=ALL. Unsubscribes recorded through an email status change
+// still work internally (see emails shared ensureSuppressed).
 export async function GET(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    if (level !== "ALL") return forbidden("Suppression requires full email access");
     const params = new URL(request.url).searchParams;
     const { page, limit } = parsePagination(params);
     const search = params.get("search")?.trim().toLowerCase() ?? "";
@@ -50,9 +52,11 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   return handleRoute(async () => {
-    const user = await requireAuth();
-    if (!user) return unauthorized();
-    if (!canManageOutreach(user)) return forbidden();
+    const access = await moduleAccess("EMAILS");
+    if (!access.ok) return access.reason === "unauthenticated" ? unauthorized() : forbidden();
+    const user = access.user;
+    const level = access.level;
+    if (level !== "ALL") return forbidden("Suppression requires full email access");
     const parsed = await parseBody(request, suppressionSchema);
     if ("error" in parsed) return parsed.error;
 
