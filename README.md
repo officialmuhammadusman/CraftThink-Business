@@ -37,11 +37,10 @@ This succeeds **only** when no users exist yet **and** `ADMIN_EMAIL` /
 at `/login` with those credentials.
 
 > **SECURITY — change the admin password after first login.** The
-> `ADMIN_PASSWORD` value is a first-run bootstrap only. A password-change
-> route is a module-builder task; until it exists, change the password by
-> updating the user's `passwordHash` in the database (bcrypt hash, cost 12)
-> or by deleting the seeded user and re-seeding once a proper flow exists.
-> Never commit a real password to the repo or to `.env.example`.
+> `ADMIN_PASSWORD` value is a first-run bootstrap only. Change it in
+> the app after signing in: Settings → Change your password
+> (POST /api/auth/change-password, current password verified, bcrypt
+> cost 12). Never commit a real password to the repo or to `.env.example`.
 
 ### Dev-only demo seed (optional)
 
@@ -85,9 +84,28 @@ refuses to run unless `SEED_DEV=true`. Never run it against production.
   `api/auth/seed`, `api/dashboard/stats` (real DB counts, zero when empty),
   `api/dashboard/coverage` (coverage totals, country/city/industry groups,
   and per-business timeline data — all from the database).
-- Pages — `/login` (real sign-in with error handling), `/` dashboard.
-  The dashboard's headline section is **Coverage** (from
-  `/api/dashboard/coverage`, above the stat cards — no fancy charts):
+- Pages — `/login` (real sign-in with error handling), `/` dashboard (see
+  Coverage below), plus full pages for Companies, Campaigns, Templates,
+  Emails (+ import/new), Suppression, Follow-ups, Meetings, Deals,
+  Projects (+ detail), Tasks, Activity Log, Team (admins only) and
+  Settings (change own password).
+- **Milestone 2 (built): Projects, Tasks, Team, Settings.** Projects:
+  full CRUD with client company, budget, dates, manager, assigned
+  developers, status, tech stack, requirements and internal notes; a WON
+  deal converts into a project from the Deals page (explicit
+  confirmation) and the project can then be edited on its detail page.
+  Tasks: CRUD per project plus a global Tasks list; status, priority,
+  start date, deadline, progress (0–100) and comments/notes per task.
+  Scoping is server-side: developers/designers see only projects they
+  are assigned to (as a developer or through a task) and only their own
+  tasks; task assignees may update only their own status/progress.
+  Team (Super Admin + Admin only): list users, create with role,
+  deactivate/reactivate, change roles — password hashes are never
+  returned by any API, and the last active Super Admin cannot be removed
+  (nor can you deactivate your own account). Settings: any signed-in
+  user changes their own password after verifying the current one
+  (bcrypt cost 12). Sidebar links to Projects, Tasks, Team (admins
+  only) and Settings; every sidebar link now points to a real page.
   totals discovered/contacted/not-yet-contacted/replied/interested, a
   table grouped by country, then city, then industry, and a per-business
   list with contacted date (first email record), emails sent, reply
@@ -99,10 +117,8 @@ refuses to run unless `SEED_DEV=true`. Never run it against production.
   and industry. Below Coverage are real stat cards from
   `/api/dashboard/stats`, empty states, and recent activity. Sidebar
   links to Companies, Campaigns, Emails, Follow-ups, Meetings, Deals,
-  Projects, Team, and Settings point to pages the module builders will
-  create; they are intentionally not stubbed here, and there is no
-  company detail page yet — the dashboard list itself carries the
-  per-business timeline fields.
+  Projects, Tasks, Team, and Settings all point to real pages (see
+  Milestone 2 above).
 - Guards — `src/middleware.ts` redirects unauthenticated dashboard-page
   visits to `/login`; every API route returns 401 when unauthenticated.
 
@@ -119,7 +135,10 @@ refuses to run unless `SEED_DEV=true`. Never run it against production.
   will build the tracking-only email-activity UI (fast manual entry form,
   CSV import of sent-email records, reply/status updates, follow-up
   reminders from those records).
-- No password-change / password-reset flow yet (see SECURITY note).
+- No password-change / password-reset flow yet (see SECURITY note) —
+  superseded for change-password by milestone 2 (Settings page +
+  POST /api/auth/change-password). Password RESET (forgot-password
+  email flow) is still not built, deliberately: this app sends no email.
 - No module list/detail pages beyond the dashboard (Companies, Campaigns,
   Emails, Follow-ups, Meetings, Deals, Projects, Team, Settings).
 - No scheduled jobs, no follow-up overdue auto-flip job (the dashboard

@@ -42,13 +42,22 @@ export function companyScope(user: SessionUser): Prisma.CompanyWhereInput {
       OR: [
         { assignedToId: user.id },
         { projects: { some: { managerId: user.id } } },
+        { projects: { some: { developers: { some: { id: user.id } } } } },
         { meetings: { some: { assignedToId: user.id } } },
       ],
     };
   }
-  // DEVELOPER / DESIGNER: only companies of projects they work on.
+  // DEVELOPER / DESIGNER: only companies of projects they work on
+  // (as an assigned developer, or through an assigned task).
   return {
-    projects: { some: { tasks: { some: { assignedToId: user.id } } } },
+    projects: {
+      some: {
+        OR: [
+          { developers: { some: { id: user.id } } },
+          { tasks: { some: { assignedToId: user.id } } },
+        ],
+      },
+    },
   };
 }
 
@@ -72,6 +81,81 @@ export function dealScope(user: SessionUser): Prisma.DealWhereInput {
   return {
     OR: [{ assignedToId: user.id }, { company: { assignedToId: user.id } }],
   };
+}
+
+/** Scoping for projects. Sales sees projects of companies assigned to them. */
+export function projectScope(user: SessionUser): Prisma.ProjectWhereInput {
+  if (isPrivileged(user)) return {};
+  if (user.role === "PROJECT_MANAGER") {
+    return {
+      OR: [
+        { managerId: user.id },
+        { developers: { some: { id: user.id } } },
+        { tasks: { some: { assignedToId: user.id } } },
+      ],
+    };
+  }
+  if (user.role === "SALES_EXECUTIVE") {
+    return { company: { assignedToId: user.id } };
+  }
+  // DEVELOPER / DESIGNER: assigned developer, or holds a task on the project.
+  return {
+    OR: [
+      { developers: { some: { id: user.id } } },
+      { tasks: { some: { assignedToId: user.id } } },
+    ],
+  };
+}
+
+/** Scoping for tasks (through their project, or direct assignment). */
+export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
+  if (isPrivileged(user)) return {};
+  if (user.role === "PROJECT_MANAGER") {
+    return {
+      OR: [
+        { assignedToId: user.id },
+        { project: { managerId: user.id } },
+        { project: { developers: { some: { id: user.id } } } },
+      ],
+    };
+  }
+  if (user.role === "SALES_EXECUTIVE") {
+    return { project: { company: { assignedToId: user.id } } };
+  }
+  return {
+    OR: [
+      { assignedToId: user.id },
+      { project: { developers: { some: { id: user.id } } } },
+    ],
+  };
+}
+
+/** Who may edit/delete a project: admins, or its project manager. */
+export function canManageProject(
+  user: SessionUser,
+  project: { managerId: string | null },
+): boolean {
+  if (isPrivileged(user)) return true;
+  return user.role === "PROJECT_MANAGER" && project.managerId === user.id;
+}
+
+/** Who may fully edit a task: admins, its project manager, or a developer on the project. */
+export function canManageTask(
+  user: SessionUser,
+  task: {
+    assignedToId: string | null;
+    project: { managerId: string | null; developers: { id: string }[] };
+  },
+): boolean {
+  if (isPrivileged(user)) return true;
+  if (user.role === "PROJECT_MANAGER" && task.project.managerId === user.id)
+    return true;
+  if (
+    (user.role === "DEVELOPER" || user.role === "DESIGNER") &&
+    task.project.developers.some((d) => d.id === user.id)
+  )
+    return true;
+  return false;
 }
 
 /** Activity log: admins see all; everyone else sees only their own actions. */

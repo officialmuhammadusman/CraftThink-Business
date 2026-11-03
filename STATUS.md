@@ -1,8 +1,38 @@
-# CraftThink Business OS — STATUS (2026-11-03)
+# CraftThink Business OS — STATUS (2026-11-03, updated milestone 2)
 
 Build verified by coordinator: `npm run build` PASSED, `npm run lint` CLEAN
-(0 warnings/errors). Nothing is live yet — deployment is the next step
-(push to GitHub, import in Vercel). No emails have been sent by this app.
+(0 warnings/errors). Milestone-2 code below is built and verified
+locally only — it is NOT pushed or deployed yet; deployment is the
+parent's step. No emails have been sent by this app.
+
+## Milestone 2 — DONE (Projects, Tasks, Team, Settings)
+Build re-verified by milestone-2 builder: `npm run build` PASSED,
+`npm run lint` CLEAN. New schema fields applied by `prisma db push` on
+deploy (vercel.json build command): Project.requirements,
+Project.internalNotes, Project.developers (many-to-many to User),
+Task.startDate, and a new TaskComment model (task, author, body).
+- Projects: list + detail pages, full CRUD API + UI (name, client
+  company, description, budget, start/end dates, manager, assigned
+  developers, status, tech stack, requirements, internal notes). WON
+  deals still convert only behind the explicit confirmation on the
+  Deals page; converted projects are then editable on their detail page.
+- Tasks: CRUD per project + a global Tasks list; title, description,
+  assignee, priority, start date, deadline, status, progress (0–100),
+  comments/notes per task. Server-side scoping: developers/designers
+  see only projects they are assigned to (developer link or task) and
+  only their tasks; a task assignee may update only their own
+  status/progress, full edits need admin/PM-manager/project-developer.
+- Team (Super Admin + Admin only, sidebar link hidden for others):
+  list, create with role, deactivate/reactivate, change roles.
+  passwordHash is never selected or returned; you cannot deactivate
+  your own account or remove the last active Super Admin.
+- Settings: any signed-in user changes their own password after
+  verifying the current one (bcrypt cost 12, min 8 chars), via
+  POST /api/auth/change-password. This closes the milestone-1 gap where
+  the admin password could only be changed directly in the database.
+- Sidebar now links Projects, Tasks, Team (admins only), Settings;
+  every sidebar link points to a real page. All new writes audit-logged;
+  no sending code, Gmail OAuth, or background jobs were added.
 
 ## Stack decision (final)
 Vercel-native only: Next.js 14 App Router + TypeScript + Tailwind +
@@ -44,11 +74,10 @@ No Gmail OAuth, no send endpoint, no email-sending code anywhere
 this app records and tracks them. Suppression/unsubscribe are
 tracking/compliance records. Future Gmail integration is a later phase.
 
-## Deliberately NOT built (milestone 2, not faked)
-Full project/task management (schema exists; only won-deal conversion
-creates a basic project record), Team/user-management pages,
-Settings/change-password page, calendar sync, background-job
-automation, advanced analytics charts beyond core counts/funnel.
+## Deliberately NOT built (later milestones, not faked)
+Calendar sync, background-job automation, advanced analytics charts
+beyond core counts/funnel, and password-reset (forgot-password email
+flow — deliberately absent, since this app sends no email).
 
 ## What Muhammad must do himself (nothing else blocks go-live)
 1. Push this folder to GitHub repo officialmuhammadusman/CraftThink-Business
@@ -59,9 +88,8 @@ automation, advanced analytics charts beyond core counts/funnel.
    `ADMIN_PASSWORD` in Vercel env vars. No other env vars are needed.
 4. After deploy: apply schema once (`DATABASE_URL=<hosted> npx prisma
    db push`), seed admin once (`POST https://<domain>/api/auth/seed`),
-   sign in at `/login`, then CHANGE the admin password — until the
-   Settings page exists (milestone 2), change it by updating the user's
-   bcrypt `passwordHash` in the database (cost 12), per README.
+   sign in at `/login`, then CHANGE the admin password in
+   Settings → Change your password (no longer a database edit).
 5. Caveats: no live-database test was possible in the sandbox, so the
    first deploy + seed + sign-in is the first live test. npm flags
    Next 14.2.18 as having a known vulnerability — bump to a patched

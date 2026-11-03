@@ -16,8 +16,13 @@ const NAV = [
   { label: "Follow-ups", href: "/follow-ups" },
   { label: "Meetings", href: "/meetings" },
   { label: "Deals", href: "/deals" },
+  { label: "Projects", href: "/projects" },
+  { label: "Tasks", href: "/tasks" },
   { label: "Activity Log", href: "/activity-log" },
 ];
+
+const ADMIN_NAV = [{ label: "Team", href: "/team" }];
+const USER_NAV = [{ label: "Settings", href: "/settings" }];
 
 export default async function DashboardLayout({
   children,
@@ -26,6 +31,12 @@ export default async function DashboardLayout({
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  const isAdmin = user.role === "SUPER_ADMIN" || user.role === "ADMIN";
+  const navItems = [
+    ...NAV,
+    ...(isAdmin ? ADMIN_NAV : []),
+    ...USER_NAV,
+  ];
 
   return (
     <div className="min-h-screen lg:flex">
@@ -39,7 +50,7 @@ export default async function DashboardLayout({
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-4 pb-3 lg:flex-col lg:overflow-visible lg:px-3 lg:pb-0">
-          {NAV.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}

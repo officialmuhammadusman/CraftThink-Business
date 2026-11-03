@@ -237,6 +237,7 @@ volume CraftThink does not have.
 | M2 | Cold-email core | A campaign sends inside its window and cap, stops on reply/bounce/unsubscribe, and suppression can never be bypassed in testing |
 | M3 | Sales slice | A reply can become a meeting and a deal; kanban moves with validation; stalled deals surface |
 | M4 | Delivery slice | A won deal becomes a project with tasks; assignees see only their work |
+| M4b | Milestone 2 — Projects/Tasks/Team/Settings (built 2026-11-03) | Full project + task CRUD with server-side assignment scoping, task comments, admin-only Team pages, self-service password change; tracking-only, no sending code added |
 | M5 | Hardening | Rate limits, backup/restore check, suppression + bounce drills, docs for daily use |
 
 ## 10. Risks and limitations (honest list)

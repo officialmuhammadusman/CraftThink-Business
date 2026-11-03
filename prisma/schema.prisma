@@ -108,6 +108,8 @@ model User {
   meetingsAssigned   Meeting[]      @relation("MeetingAssignee")
   dealsAssigned      Deal[]         @relation("DealAssignee")
   projectsManaged    Project[]      @relation("ProjectManager")
+  projectsDeveloped  Project[]      @relation("ProjectDevelopers")
+  taskComments       TaskComment[]
   tasksAssigned      Task[]         @relation("TaskAssignee")
   activityLogs       ActivityLog[]  @relation("ActivityActor")
 
@@ -334,8 +336,11 @@ model Project {
   deadline    DateTime?
   managerId   String?
   manager     User?         @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+  developers  User[]        @relation("ProjectDevelopers")
   status      ProjectStatus @default(PLANNING)
   techStack   String[]      @default([])
+  requirements String?
+  internalNotes String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -356,6 +361,7 @@ model Task {
   assignedToId String?
   assignedTo   User?        @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   priority     TaskPriority @default(MEDIUM)
+  startDate    DateTime?
   deadline     DateTime?
   status       TaskStatus   @default(TODO)
   // 0-100, enforced by Zod validation in src/lib/validation.ts.
@@ -363,9 +369,24 @@ model Task {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
+  comments TaskComment[]
+
   @@index([projectId])
   @@index([assignedToId])
   @@index([status])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([createdAt])
 }
 
 model ActivityLog {

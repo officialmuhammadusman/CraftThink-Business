@@ -156,6 +156,7 @@ export const projectSchema = z.object({
   startDate: optionalDate,
   deadline: optionalDate,
   managerId: z.string().optional().nullable(),
+  developerIds: z.array(z.string().min(1)).max(100).default([]),
   status: z.enum([
     "PLANNING",
     "IN_PROGRESS",
@@ -166,6 +167,8 @@ export const projectSchema = z.object({
     "CANCELLED",
   ]),
   techStack: z.array(z.string().trim().min(1).max(100)).max(50).default([]),
+  requirements: optionalText,
+  internalNotes: optionalText,
 });
 
 export const taskSchema = z.object({
@@ -174,9 +177,47 @@ export const taskSchema = z.object({
   description: optionalText,
   assignedToId: z.string().optional().nullable(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+  startDate: optionalDate,
   deadline: optionalDate,
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "DONE"]),
   progress: z.number().int().min(0).max(100).default(0),
+});
+
+export const taskCommentSchema = z.object({
+  body: z.string().trim().min(1, "Comment is required").max(5000),
+});
+
+export const userCreateSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(255),
+  email: z.string().trim().email("Enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(200),
+  role: z.enum([
+    "SUPER_ADMIN",
+    "ADMIN",
+    "PROJECT_MANAGER",
+    "SALES_EXECUTIVE",
+    "DEVELOPER",
+    "DESIGNER",
+  ]),
+});
+
+export const userPatchSchema = z.object({
+  role: z
+    .enum([
+      "SUPER_ADMIN",
+      "ADMIN",
+      "PROJECT_MANAGER",
+      "SALES_EXECUTIVE",
+      "DEVELOPER",
+      "DESIGNER",
+    ])
+    .optional(),
+  active: z.boolean().optional(),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "New password must be at least 8 characters").max(200),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
