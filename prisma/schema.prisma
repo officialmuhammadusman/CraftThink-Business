@@ -1,0 +1,397 @@
+// CraftThink Business OS — full schema for ALL future modules.
+// Later module builders must NOT need schema changes for the modules
+// listed here. If a genuinely new module arrives, add it in a new migration.
+//
+// Duplicate-company note: @@unique([name, website]) below prevents two
+// companies with the same name AND the same website. PostgreSQL treats
+// NULL as distinct, so two companies with the same name and NO website
+// are NOT blocked by the database constraint. Module builders must also
+// check duplicates in code (case-insensitive name match, plus website
+// match when a website is present) before creating a company.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  PROJECT_MANAGER
+  SALES_EXECUTIVE
+  DEVELOPER
+  DESIGNER
+}
+
+enum EmailStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  DELIVERED
+  BOUNCED
+  REPLIED
+  POSITIVE
+  NEGATIVE
+  FOLLOW_UP_REQUIRED
+  UNSUBSCRIBED
+}
+
+enum FollowUpStatus {
+  PENDING
+  DONE
+  OVERDUE
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  COMPLETED
+  RESCHEDULED
+  CANCELLED
+  NO_SHOW
+}
+
+enum DealStatus {
+  NEW_LEAD
+  CONTACTED
+  FOLLOW_UP
+  INTERESTED
+  MEETING_SCHEDULED
+  MEETING_COMPLETED
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  REVIEW
+  TESTING
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(DEVELOPER)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companiesAssigned  Company[]      @relation("CompanyAssignee")
+  campaignsOwned     Campaign[]     @relation("CampaignOwner")
+  emailAssigned      EmailActivity[] @relation("EmailAssignee")
+  followUpsAssigned  FollowUp[]     @relation("FollowUpAssignee")
+  meetingsAssigned   Meeting[]      @relation("MeetingAssignee")
+  dealsAssigned      Deal[]         @relation("DealAssignee")
+  projectsManaged    Project[]      @relation("ProjectManager")
+  tasksAssigned      Task[]         @relation("TaskAssignee")
+  activityLogs       ActivityLog[]  @relation("ActivityActor")
+
+  @@index([role])
+  @@index([active])
+}
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String
+  website       String?
+  industry      String?
+  country       String?
+  city          String?
+  size          String?
+  linkedinUrl   String?
+  description   String?
+  requirements  String?
+  researchNotes String?
+  // Free-text source (e.g. "LinkedIn", "Referral", "Website"). Kept as a
+  // string rather than an enum so new sources never need a migration.
+  source        String?
+  // Pipeline status as free text (e.g. NEW, CONTACTED, QUALIFIED, CLIENT).
+  // DealStatus on Deal is the authoritative deal-stage enum.
+  status        String   @default("NEW")
+  priority      String   @default("MEDIUM")
+  assignedToId  String?
+  assignedTo    User?    @relation("CompanyAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  contacts       Contact[]
+  emailActivities EmailActivity[]
+  followUps      FollowUp[]
+  meetings       Meeting[]
+  deals          Deal[]
+  projects       Project[]
+  tags           Tag[]
+
+  @@unique([name, website])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([createdAt])
+}
+
+model Contact {
+  id              String   @id @default(cuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  fullName        String
+  jobTitle        String?
+  email           String
+  linkedinUrl     String?
+  phone           String?
+  isDecisionMaker Boolean  @default(false)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  emailActivities EmailActivity[]
+  followUps       FollowUp[]
+  meetings        Meeting[]
+  deals           Deal[]
+
+  // Same email may exist at different companies, but not twice at one company.
+  @@unique([companyId, email])
+  @@index([companyId])
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  companies Company[]
+  createdAt DateTime  @default(now())
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String?
+  owner       User?    @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  emailActivities EmailActivity[]
+
+  @@index([ownerId])
+}
+
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  industry  String?
+  subject   String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  emailActivities EmailActivity[]
+
+  @@index([industry])
+}
+
+model EmailActivity {
+  id             String      @id @default(cuid())
+  companyId      String
+  company        Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId      String?
+  contact        Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  campaignId     String?
+  campaign       Campaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  templateId     String?
+  template       EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  recipientEmail String
+  senderEmail    String?
+  subject        String
+  body           String
+  sequenceNumber Int         @default(1)
+  status         EmailStatus @default(DRAFT)
+  sentAt         DateTime?
+  followUpDate   DateTime?
+  assignedToId   String?
+  assignedTo     User?       @relation("EmailAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([companyId])
+  @@index([contactId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([sentAt])
+  @@index([followUpDate])
+  @@index([assignedToId])
+}
+
+model FollowUp {
+  id           String         @id @default(cuid())
+  companyId    String
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId    String?
+  contact      Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  dueDate      DateTime
+  reason       String?
+  notes        String?
+  // Stored status. A background/module job may flip PENDING rows whose
+  // dueDate has passed to OVERDUE; the dashboard also computes overdue
+  // from dueDate so a stale stored value never hides an overdue item.
+  status       FollowUpStatus @default(PENDING)
+  assignedToId String?
+  assignedTo   User?          @relation("FollowUpAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([companyId])
+  @@index([dueDate])
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model Meeting {
+  id           String        @id @default(cuid())
+  companyId    String
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId    String?
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  title        String
+  dateTime     DateTime
+  platform     String?
+  link         String?
+  assignedToId String?
+  assignedTo   User?         @relation("MeetingAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  status       MeetingStatus @default(SCHEDULED)
+  notes        String?
+  requirements String?
+  budgetNotes  String?
+  nextSteps    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([companyId])
+  @@index([dateTime])
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model Deal {
+  id                String     @id @default(cuid())
+  companyId         String
+  company           Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId         String?
+  contact           Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  title             String
+  services          String[]   @default([])
+  estimatedBudget   Float?
+  currency          String     @default("USD")
+  expectedCloseDate DateTime?
+  status            DealStatus @default(NEW_LEAD)
+  finalPrice        Float?
+  notes             String?
+  assignedToId      String?
+  assignedTo        User?      @relation("DealAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  projects Project[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  dealId      String?
+  deal        Deal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  budget      Float?
+  startDate   DateTime?
+  deadline    DateTime?
+  managerId   String?
+  manager     User?         @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+  status      ProjectStatus @default(PLANNING)
+  techStack   String[]      @default([])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tasks Task[]
+
+  @@index([companyId])
+  @@index([dealId])
+  @@index([managerId])
+  @@index([status])
+}
+
+model Task {
+  id           String       @id @default(cuid())
+  projectId    String
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  assignedToId String?
+  assignedTo   User?        @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  priority     TaskPriority @default(MEDIUM)
+  deadline     DateTime?
+  status       TaskStatus   @default(TODO)
+  // 0-100, enforced by Zod validation in src/lib/validation.ts.
+  progress     Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([status])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model Suppression {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  reason    String?
+  // Scope as free text, e.g. GLOBAL or a campaign id. Kept as a string so
+  // new scopes never need a migration.
+  scope     String   @default("GLOBAL")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope])
+}
